@@ -135,6 +135,14 @@ body.playing #pauseBtn { display: block; }
   width: 50%;
   z-index: 5;
 }
+#camZone {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  z-index: 4; /* abaixo dos botões */
+}
 #stickBase {
   position: fixed;
   left: 0;
@@ -187,6 +195,12 @@ body.playing #pauseBtn { display: block; }
 .tbtn[data-act="heavy"]  { right: calc(128px + env(safe-area-inset-right)); bottom: calc(16px + env(safe-area-inset-bottom)); }
 .tbtn[data-act="dash"]   { right: calc(116px + env(safe-area-inset-right)); bottom: calc(100px + env(safe-area-inset-bottom)); }
 .tbtn[data-act="parry"]  { right: calc(34px + env(safe-area-inset-right)); bottom: calc(130px + env(safe-area-inset-bottom)); }
+.tbtn.small { width: 52px; height: 52px; }
+.tbtn.small span { font-size: 1.2rem; }
+.tbtn[data-act="lock"]   { right: calc(44px + env(safe-area-inset-right)); bottom: calc(210px + env(safe-area-inset-bottom)); }
+.tbtn[data-act="rage"]   { right: calc(210px + env(safe-area-inset-right)); bottom: calc(22px + env(safe-area-inset-bottom)); }
+.tbtn.on { background: rgba(255, 207, 74, 0.35); border-color: #ffcf4a; }
+.tbtn.ready { background: rgba(255, 90, 60, 0.55); border-color: #ff5a3c; box-shadow: 0 0 18px rgba(255, 90, 60, 0.7); }
 
 #pauseBtn {
   display: none;

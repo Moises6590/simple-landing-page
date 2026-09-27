@@ -15,12 +15,15 @@
 
   <!-- Controles de toque (aparecem só em telas touch) -->
   <div id="touch">
+    <div id="camZone"></div>
     <div id="stickZone"></div>
     <div id="stickBase"><div id="stickKnob"></div></div>
     <button class="tbtn big" data-act="attack"><span>⚔</span><small>ATAQUE</small></button>
     <button class="tbtn" data-act="heavy"><span>✹</span><small>PESADO</small></button>
     <button class="tbtn" data-act="dash"><span>»</span><small>ESQUIVA</small></button>
     <button class="tbtn" data-act="parry"><span>◈</span><small>APARAR</small></button>
+    <button class="tbtn small" data-act="lock"><span>◎</span><small>ALVO</small></button>
+    <button class="tbtn small" data-act="rage"><span>✦</span><small>FÚRIA</small></button>
   </div>
   <button id="pauseBtn" aria-label="Pausar">II</button>
 
@@ -34,29 +37,28 @@
         <div>
           <h3>PC</h3>
           <ul>
-            <li><kbd>WASD</kbd>/<kbd>Setas</kbd> mover</li>
-            <li><kbd>J</kbd> ou <kbd>Clique</kbd> ataque (combo x3)</li>
-            <li><kbd>K</kbd> ou <kbd>Botão dir.</kbd> ataque pesado</li>
-            <li><kbd>Espaço</kbd>/<kbd>Shift</kbd> esquiva</li>
-            <li><kbd>L</kbd>/<kbd>E</kbd> aparar (parry)</li>
-            <li>Mouse mira · <kbd>P</kbd>/<kbd>Esc</kbd> pausa</li>
+            <li><kbd>WASD</kbd> mover · <kbd>Mouse</kbd> gira a câmera (clique para capturar)</li>
+            <li><kbd>Clique</kbd>/<kbd>J</kbd> ataque (combo x3)</li>
+            <li><kbd>Botão dir.</kbd>/<kbd>K</kbd> <b>segure</b> para carregar o pesado</li>
+            <li><kbd>Espaço</kbd> esquiva · atacar logo depois = <b>investida</b></li>
+            <li><kbd>E</kbd>/<kbd>L</kbd> aparar · <kbd>Q</kbd>/<kbd>Tab</kbd> travar alvo</li>
+            <li><kbd>R</kbd> Fúria · <kbd>Setas</kbd> câmera · <kbd>F</kbd> FPS · <kbd>Esc</kbd> pausa</li>
           </ul>
         </div>
         <div>
           <h3>Celular</h3>
           <ul>
-            <li>Joystick: toque e arraste na metade esquerda</li>
-            <li>Botões à direita</li>
-            <li>Segure ATAQUE para encadear o combo</li>
-            <li>A mira gruda no inimigo mais próximo</li>
+            <li>Metade esquerda: joystick</li>
+            <li>Metade direita: arraste para girar a câmera</li>
+            <li>Segure PESADO para carregar; ALVO trava a mira</li>
+            <li>FÚRIA acende quando a barra vermelha enche</li>
           </ul>
         </div>
       </div>
       <div class="tips">
-        <b>Dicas:</b> aparar no instante do golpe atordoa o inimigo (dano x1.6) e rebate flechas ·
-        esquivar no último momento deixa o tempo lento · ataques pelas costas causam crítico ·
-        o golpe <span class="orange">laranja</span> do Brutamontes não pode ser aparado ·
-        faça o Brutamontes investir contra pilares ou contra os aliados dele.
+        <b>Dicas:</b> aparar no instante do golpe atordoa o inimigo — ataque um inimigo atordoado para uma <b>execução</b> ·
+        esquivar no último momento deixa o tempo lento · a barra de Fúria enche com golpes, aparos e esquivas ·
+        o golpe <span class="orange">laranja</span> do Brutamontes não pode ser aparado · setas vermelhas na borda da tela avisam ataques vindos de fora da visão.
       </div>
     </div>
   </div>

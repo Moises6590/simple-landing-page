@@ -117,7 +117,7 @@
   let W = 0, H = 0, DPR = 1;
   let onResize = null; // definido pelo renderizador 3D
   function resize() {
-    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    DPR = Math.min(window.devicePixelRatio || 1, 1.5); // HUD 2D: 1,5x basta e custa menos
     W = window.innerWidth; H = window.innerHeight;
     canvas.width = Math.round(W * DPR);
     canvas.height = Math.round(H * DPR);
@@ -150,21 +150,28 @@
     KeyK: 'heavy', KeyX: 'heavy',
     Space: 'dash', ShiftLeft: 'dash', ShiftRight: 'dash',
     KeyL: 'parry', KeyE: 'parry', KeyC: 'parry',
+    KeyQ: 'lock', Tab: 'lock', KeyR: 'rage',
   };
+  // Câmera em terceira pessoa (a simulação é no plano; yaw = ângulo para onde a câmera olha)
+  const CAMERA = { yaw: -Math.PI / 2, pitch: 0.36, dist: 6.4, idleT: 0 };
+  const CAMIN = { dx: 0, dy: 0 };
+  let showFps = false;
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Escape' || e.code === 'KeyP') { togglePause(); return; }
     if ((G.state === 'menu' || G.state === 'over') && (e.code === 'Enter' || (G.state === 'menu' && e.code === 'Space'))) {
       e.preventDefault(); startGame(); return;
     }
+    if (e.code === 'KeyF') { showFps = !showFps; return; }
     const act = KEYMAP[e.code];
     if (act) {
       e.preventDefault();
-      if (!e.repeat) { queue(act); Input.held[act] = true; }
+      if (!e.repeat) {
+        if (act === 'lock') toggleLock();
+        else { queue(act); Input.held[act] = true; }
+      }
     }
     if (e.code.startsWith('Arrow')) e.preventDefault();
     Input.keys.add(e.code);
-    // Teclado em uso: movimento volta a definir a mira.
-    if (/^(Key[WASD]|Arrow)/.test(e.code)) Input.mouse.aim = false;
   });
   window.addEventListener('keyup', (e) => {
     Input.keys.delete(e.code);
@@ -179,19 +186,28 @@
   document.addEventListener('visibilitychange', () => { if (document.hidden && G.state === 'play') setPaused(true); });
 
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-  canvas.addEventListener('pointermove', (e) => {
-    if (e.pointerType !== 'mouse') return;
-    Input.mouse.x = e.clientX; Input.mouse.y = e.clientY; Input.mouse.aim = true;
+  // Mouse gira a câmera. Com o ponteiro capturado (clique no jogo) o giro é ilimitado.
+  document.addEventListener('mousemove', (e) => {
+    if (G.state !== 'play') return;
+    if (document.pointerLockElement === canvas || e.buttons === 0) { CAMIN.dx += e.movementX || 0; CAMIN.dy += e.movementY || 0; }
   });
   canvas.addEventListener('pointerdown', (e) => {
     if (e.pointerType !== 'mouse') return;
-    Input.mouse.x = e.clientX; Input.mouse.y = e.clientY; Input.mouse.aim = true;
+    if (G.state === 'play' && document.pointerLockElement !== canvas && canvas.requestPointerLock && !isTouch()) {
+      try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (_) { /* opcional */ }
+    }
     if (e.button === 0) { queue('attack'); Input.held.attack = true; }
-    else if (e.button === 2) { queue('heavy'); }
-    else if (e.button === 1) { queue('parry'); e.preventDefault(); }
+    else if (e.button === 2) { queue('heavy'); Input.held.heavy = true; }
+    else if (e.button === 1) { toggleLock(); e.preventDefault(); }
   });
   window.addEventListener('pointerup', (e) => {
-    if (e.pointerType === 'mouse' && e.button === 0) Input.held.attack = false;
+    if (e.pointerType !== 'mouse') return;
+    if (e.button === 0) Input.held.attack = false;
+    if (e.button === 2) Input.held.heavy = false;
+  });
+  // Saiu da captura do ponteiro (Esc) no meio da luta: pausa
+  document.addEventListener('pointerlockchange', () => {
+    if (!document.pointerLockElement && G.state === 'play' && !isTouch()) setPaused(true);
   });
 
   // ----- Toque -----
@@ -252,6 +268,24 @@
   zone.addEventListener('pointercancel', stickEnd);
   zone.addEventListener('lostpointercapture', stickEnd);
 
+  const camZone = document.getElementById('camZone');
+  let camTouch = null;
+  camZone.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); enableTouch();
+    if (camTouch) return;
+    camTouch = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    try { camZone.setPointerCapture(e.pointerId); } catch (_) { /* ignora */ }
+  });
+  camZone.addEventListener('pointermove', (e) => {
+    if (!camTouch || e.pointerId !== camTouch.id) return;
+    CAMIN.dx += (e.clientX - camTouch.x) * 1.6; CAMIN.dy += (e.clientY - camTouch.y) * 1.2;
+    camTouch.x = e.clientX; camTouch.y = e.clientY;
+  });
+  const camEnd = (e) => { if (camTouch && e.pointerId === camTouch.id) camTouch = null; };
+  camZone.addEventListener('pointerup', camEnd);
+  camZone.addEventListener('pointercancel', camEnd);
+  camZone.addEventListener('lostpointercapture', camEnd);
+
   const touchButtons = {};
   document.querySelectorAll('.tbtn').forEach((b) => {
     const act = b.dataset.act;
@@ -259,8 +293,8 @@
     const down = (e) => {
       e.preventDefault();
       enableTouch();
-      queue(act);
-      Input.held[act] = true;
+      if (act === 'lock') toggleLock();
+      else { queue(act); Input.held[act] = true; }
       b.classList.add('pressed');
       try { b.setPointerCapture(e.pointerId); } catch (_) { /* ignora */ }
     };
@@ -275,14 +309,17 @@
   function readMove() {
     let x = 0, y = 0;
     const k = Input.keys;
-    if (k.has('KeyA') || k.has('ArrowLeft')) x -= 1;
-    if (k.has('KeyD') || k.has('ArrowRight')) x += 1;
-    if (k.has('KeyW') || k.has('ArrowUp')) y -= 1;
-    if (k.has('KeyS') || k.has('ArrowDown')) y += 1;
+    if (k.has('KeyA')) x -= 1;
+    if (k.has('KeyD')) x += 1;
+    if (k.has('KeyW')) y -= 1;
+    if (k.has('KeyS')) y += 1;
     const m = len(x, y);
     if (m > 0) { x /= m; y /= m; }
     if (Input.stick.active && (Input.stick.x || Input.stick.y)) { x = Input.stick.x; y = Input.stick.y; }
-    return { x, y, m: len(x, y) };
+    // x = direita, -y = frente, no referencial da câmera
+    const fx = Math.cos(CAMERA.yaw), fy = Math.sin(CAMERA.yaw);
+    const wx = fx * -y + -fy * x, wy = fy * -y + fx * x;
+    return { x: wx, y: wy, m: len(wx, wy) };
   }
 
   // =========================================================================
@@ -343,6 +380,34 @@
   let threatId = 0;
 
   // Hitstop local: congela só quem bateu e quem apanhou; o resto da luta continua.
+  function updateCameraLogic(dt) {
+    const sens = isTouch() ? 0.0055 : 0.0026;
+    if (CAMIN.dx || CAMIN.dy) CAMERA.idleT = 0; else CAMERA.idleT += dt;
+    CAMERA.yaw += CAMIN.dx * sens;
+    CAMERA.pitch = clamp(CAMERA.pitch + CAMIN.dy * sens * 0.8, 0.06, 1.05);
+    CAMIN.dx = 0; CAMIN.dy = 0;
+    const kk = Input.keys;
+    if (kk.has('ArrowLeft')) CAMERA.yaw -= 2.6 * dt;
+    if (kk.has('ArrowRight')) CAMERA.yaw += 2.6 * dt;
+    if (kk.has('ArrowUp')) CAMERA.pitch = clamp(CAMERA.pitch - 1.2 * dt, 0.06, 1.05);
+    if (kk.has('ArrowDown')) CAMERA.pitch = clamp(CAMERA.pitch + 1.2 * dt, 0.06, 1.05);
+    if (P.lock) { // alvo travado: câmera enquadra o alvo
+      const want = Math.atan2(P.lock.y - P.y, P.lock.x - P.x);
+      CAMERA.yaw += angDiff(CAMERA.yaw, want) * expK(5, dt);
+    } else if (isTouch() && CAMERA.idleT > 1.0 && len(P.vx, P.vy) > 60) { // toque: câmera se alinha sozinha
+      const d = angDiff(CAMERA.yaw, Math.atan2(P.vy, P.vx));
+      if (Math.abs(d) < 2.2) CAMERA.yaw += d * expK(1.3, dt);
+    }
+    CAMERA.yaw = angDiff(0, CAMERA.yaw);
+  }
+  // Remove itens mortos sem criar arrays novos (menos lixo para o GC → sem engasgos)
+  function sweep(arr, keep) {
+    let j = 0;
+    for (let i = 0; i < arr.length; i++) if (keep(arr[i])) arr[j++] = arr[i];
+    arr.length = j;
+    return arr;
+  }
+  const alivePr = (p) => !p.dead, liveP = (p) => p.life > 0;
   function hitstop(t, ...ents) {
     for (const o of ents) if (o) o.freeze = Math.max(o.freeze || 0, t);
   }
@@ -372,6 +437,19 @@
     { wind: 0.11, active: 0.12, rec: 0.32, dmg: 22, range: 80, arc: 2.7, kb: 520, lunge: 380, poise: 35, stop: 0.08, finisher: true },
   ];
   const HEAVY = { wind: 0.3, active: 0.12, rec: 0.36, dmg: 28, range: 100, kb: 560, poise: 70, stop: 0.09 };
+  // Pesado carregado: segure para subir de nível (1 → 3); soltar dispara o giro.
+  const CHARGE_MAX = 1.0;
+  const HEAVY_LV = [null,
+    { dmg: 28, range: 100, kb: 560, poise: 70, stop: 0.09 },
+    { dmg: 40, range: 120, kb: 680, poise: 95, stop: 0.11 },
+    { dmg: 58, range: 145, kb: 820, poise: 150, stop: 0.13 }];
+  function heavyDef(lv, chargedT) {
+    return Object.assign({}, HEAVY, HEAVY_LV[lv], { wind: Math.max(0.07, HEAVY.wind - chargedT), lv });
+  }
+  // Investida: ataque logo depois (ou no fim) da esquiva
+  const DASH_ATK = { wind: 0.05, active: 0.1, rec: 0.26, dmg: 16, range: 86, arc: 1.2, kb: 430, lunge: 560, poise: 30, stop: 0.06, dash: true };
+  const EXEC = { dur: 0.7, hitT: 0.34 };          // execução em inimigo atordoado
+  const RAGE = { dur: 1.05, pulses: [0.18, 0.5, 0.82], radius: 175, dmg: 22, kb: 620 };
 
   const P = {
     x: 0, y: 0, px: 0, py: 0, vx: 0, vy: 0, r: 15, face: 0,
@@ -380,6 +458,7 @@
     lunged: false, lungeScale: 1, hitSet: new Set(),
     iframe: 0, dashCd: 0, dashX: 1, dashY: 0, ghostT: 0, dodged: false,
     parryT: 0, swingSide: 1, threat: null,
+    hv: HEAVY, lock: null, rage: 0, sinceDash: 9, atkKind: 'combo', execTarget: null, execDone: false, pulse: 0,
   };
   function resetPlayer() {
     Object.assign(P, {
@@ -387,6 +466,7 @@
       hp: P.maxHp, st: P.maxSt, stDelay: 0, state: 'idle', t: 0, atk: null,
       comboIdx: -1, comboWindow: 0, iframe: 0, dashCd: 0, parryT: 0, threat: null,
       freeze: 0, confirm: false, flinchT: 0, flinchA: 0, flinchK: 1, actionId: 0,
+      hv: HEAVY, lock: null, rage: 0, sinceDash: 9, atkKind: 'combo', execTarget: null, execDone: false, pulse: 0,
     });
     P.hitSet.clear();
   }
@@ -394,18 +474,33 @@
   function mouseWorld() {
     return pickGround(Input.mouse.x, Input.mouse.y); // raio da câmera até o plano de ataque
   }
+  // Mira: alvo travado > direção do movimento > para onde a câmera olha
   function baseAim(mv) {
-    if (Input.mouse.aim && !isTouch()) {
-      const m = mouseWorld();
-      return Math.atan2(m.y - P.y, m.x - P.x);
-    }
+    if (P.lock) return Math.atan2(P.lock.y - P.y, P.lock.x - P.x);
     if (mv.m > 0.2) return Math.atan2(mv.y, mv.x);
-    return P.face;
+    return CAMERA.yaw;
   }
+  // Trava de alvo: o inimigo mais próximo do centro da visão
+  function toggleLock() {
+    if (G.state !== 'play') return;
+    if (P.lock) { P.lock = null; return; }
+    let best = null, bs = Infinity;
+    for (const e of G.enemies) {
+      if (e.dead || e.state === 'spawn') continue;
+      const d = len(e.x - P.x, e.y - P.y);
+      if (d > 620) continue;
+      const ad = Math.abs(angDiff(CAMERA.yaw, Math.atan2(e.y - P.y, e.x - P.x)));
+      const sc = ad * 260 + d;
+      if (sc < bs) { bs = sc; best = e; }
+    }
+    P.lock = best;
+    if (best) Sound.play('pickup');
+  }
+  function addRage(v) { P.rage = Math.min(100, P.rage + v); }
   // Mira assistida: escolhe o inimigo que melhor combina distância + ângulo.
   function aimAssist(mv, range) {
     const baseA = baseAim(mv);
-    const cone = Input.mouse.aim && !isTouch() ? 0.55 : 1.4;
+    const cone = P.lock ? 0.3 : 1.4;
     let best = null, bs = Infinity;
     for (const e of G.enemies) {
       if (e.dead || e.state === 'spawn') continue;
@@ -430,8 +525,8 @@
     switch (P.state) {
       case 'idle': return true;
       case 'attack': return P.t >= P.atk.wind + P.atk.active * (P.confirm ? 0.7 : 1); // cancela a recuperação
-      case 'heavy': return P.t >= HEAVY.wind + HEAVY.active + HEAVY.rec * 0.45;
-      case 'dash': return P.t >= PL.dashTime * 0.55; // ataque em investida
+      case 'heavy': return P.t >= P.hv.wind + P.hv.active + P.hv.rec * 0.45;
+      case 'dash': return P.t >= PL.dashTime * 0.35; // vira investida
       case 'parry': return P.t >= PL.parryWindow;
       default: return false;
     }
@@ -441,7 +536,8 @@
     switch (P.state) {
       case 'idle': case 'parry': return true;
       case 'attack': return P.t < P.atk.wind || (inStrike(P.atk) ? strikeCancel(P.atk) : afterStrike(P.atk, WHIFF_LOCK));
-      case 'heavy': return P.t < HEAVY.wind || (inStrike(HEAVY) ? strikeCancel(HEAVY) : afterStrike(HEAVY, WHIFF_LOCK * 1.5));
+      case 'heavy': return P.t < P.hv.wind || (inStrike(P.hv) ? strikeCancel(P.hv) : afterStrike(P.hv, WHIFF_LOCK * 1.5));
+      case 'charge': return true;
       case 'hurt': return P.t >= 0.12;
       default: return false;
     }
@@ -450,20 +546,41 @@
     switch (P.state) {
       case 'idle': return true;
       case 'attack': return P.t < P.atk.wind || (inStrike(P.atk) ? strikeCancel(P.atk) : afterStrike(P.atk, WHIFF_LOCK));
-      case 'heavy': return P.t < HEAVY.wind || (inStrike(HEAVY) ? strikeCancel(HEAVY) : afterStrike(HEAVY, WHIFF_LOCK * 1.5));
+      case 'heavy': return P.t < P.hv.wind || (inStrike(P.hv) ? strikeCancel(P.hv) : afterStrike(P.hv, WHIFF_LOCK * 1.5));
+      case 'charge': return true;
       case 'dash': return P.t >= PL.dashTime * 0.6;
       default: return false;
     }
   }
 
+  // Inimigo atordoado ao alcance e na frente → execução
+  function execTarget(mv) {
+    const aimA = baseAim(mv);
+    let best = null, bd = Infinity;
+    for (const e of G.enemies) {
+      if (e.dead || e.state !== 'stun') continue;
+      const d = len(e.x - P.x, e.y - P.y);
+      if (d > 95 + e.r) continue;
+      if (Math.abs(angDiff(aimA, Math.atan2(e.y - P.y, e.x - P.x))) > 1.4 && d > e.r + P.r + 20) continue;
+      if (d < bd) { bd = d; best = e; }
+    }
+    return best;
+  }
   function tryAction(act, mv) {
     if (act === 'attack' && canAttackNow()) {
+      const ex = execTarget(mv);
+      if (ex) { startExecute(ex); return true; }
+      if (P.state === 'dash' || P.sinceDash < 0.18) { startAttack(-1, mv); return true; }
       const next = (P.state === 'attack' || P.comboWindow > 0) ? (P.comboIdx + 1) % 3 : 0;
       startAttack(next, mv);
       return true;
     }
     if (act === 'heavy' && canAttackNow() && P.st >= PL.heavyCost) {
-      startHeavy(mv);
+      startCharge(mv);
+      return true;
+    }
+    if (act === 'rage' && P.rage >= 100 && P.state !== 'dead' && P.state !== 'rage' && P.state !== 'execute') {
+      startRage();
       return true;
     }
     if (act === 'dash' && canDashNow()) {
@@ -478,9 +595,11 @@
   }
 
   function startAttack(idx, mv) {
-    const a = COMBO[idx];
+    const a = idx < 0 ? DASH_ATK : COMBO[idx];
     const aim = aimAssist(mv, a.range);
-    P.state = 'attack'; P.t = 0; P.atk = a; P.comboIdx = idx; P.confirm = false; P.actionId++;
+    P.state = 'attack'; P.t = 0; P.atk = a; P.comboIdx = idx < 0 ? 0 : idx; P.confirm = false; P.actionId++;
+    P.atkKind = idx < 0 ? 'dash' : 'combo';
+    if (idx < 0) addText(P.x, P.y - 30, 'INVESTIDA', '#8fd3ff', 13);
     P.lunged = false; P.hitSet.clear();
     P.swingSide = idx === 1 ? -1 : 1;
     P.face = aim.ang;
@@ -488,20 +607,49 @@
     P.lungeScale = aim.target ? clamp((aim.dist - P.r - aim.target.r - 12) / (a.range * 0.7), 0.1, 1.3) : 0.8;
     P.threat = { id: ++threatId, kind: 'light', range: a.range, arc: a.arc };
   }
-  function startHeavy(mv) {
-    const aim = aimAssist(mv, HEAVY.range);
+  function startCharge(mv) {
+    P.state = 'charge'; P.t = 0; P.actionId++;
+    P.chargeLv = 1;
+    P.face = aimAssist(mv, HEAVY.range).ang;
+    P.threat = null;
+  }
+  function startHeavy(mv, lv, chargedT) {
+    P.hv = heavyDef(lv, chargedT);
+    const aim = aimAssist(mv, P.hv.range);
     P.state = 'heavy'; P.t = 0; P.lunged = false; P.hitSet.clear(); P.confirm = false; P.actionId++;
     P.face = aim.ang;
     P.st -= PL.heavyCost; P.stDelay = 0.7;
     P.comboWindow = 0; P.comboIdx = -1;
-    P.threat = { id: ++threatId, kind: 'heavy', range: HEAVY.range, arc: TAU };
+    P.threat = { id: ++threatId, kind: 'heavy', range: P.hv.range, arc: TAU };
+  }
+  function startExecute(e) {
+    P.state = 'execute'; P.t = 0; P.actionId++;
+    P.execTarget = e; P.execDone = false;
+    P.face = Math.atan2(e.y - P.y, e.x - P.x);
+    P.iframe = Math.max(P.iframe, EXEC.dur);
+    P.vx = P.vy = 0;
+    e.st = Math.max(e.st, EXEC.dur); // continua atordoado até o golpe
+    slowmo(EXEC.dur * 0.8, 0.55);
+    P.threat = null;
+    addText(e.x, e.y - e.r - 30, 'EXECUÇÃO!', '#ffcf4a', 20);
+  }
+  function startRage() {
+    P.state = 'rage'; P.t = 0; P.actionId++; P.pulse = 0;
+    P.rage = 0;
+    P.iframe = Math.max(P.iframe, RAGE.dur + 0.1);
+    P.st = P.maxSt;
+    P.threat = { id: ++threatId, kind: 'heavy', range: RAGE.radius, arc: TAU };
+    slowmo(RAGE.dur, 0.7);
+    shake(0.5);
+    addText(P.x, P.y - 36, 'FÚRIA!', '#ff5a3c', 24);
+    Sound.play('heavy');
   }
   function startDash(mv) {
     let dx = mv.x, dy = mv.y;
     if (mv.m < 0.2) { dx = Math.cos(P.face); dy = Math.sin(P.face); }
     const m = len(dx, dy) || 1;
     P.dashX = dx / m; P.dashY = dy / m;
-    P.state = 'dash'; P.t = 0; P.actionId++;
+    P.state = 'dash'; P.t = 0; P.actionId++; P.sinceDash = 9;
     P.iframe = Math.max(P.iframe, PL.dashTime + 0.05);
     P.st -= PL.dashCost; P.stDelay = 0.55;
     P.dashCd = PL.dashTime + PL.dashCd;
@@ -529,7 +677,8 @@
 
   function playerStep(dt) {
     const mv = readMove();
-    P.flinchT -= dt;
+    P.flinchT -= dt; P.sinceDash += dt;
+    if (P.lock && (P.lock.dead || len(P.lock.x - P.x, P.lock.y - P.y) > 760)) P.lock = null;
     P.iframe -= dt; P.dashCd -= dt; P.parryT -= dt; P.comboWindow -= dt; P.stDelay -= dt;
     if (P.stDelay <= 0) P.st = Math.min(P.maxSt, P.st + 40 * dt);
 
@@ -555,12 +704,49 @@
       case 'idle': {
         P.vx += (mv.x * PL.speed - P.vx) * moveK;
         P.vy += (mv.y * PL.speed - P.vy) * moveK;
-        if (Input.mouse.aim && !isTouch()) {
-          const m = mouseWorld();
-          turnTo(P, Math.atan2(m.y - P.y, m.x - P.x), 22, dt);
-        } else if (mv.m > 0.1) {
-          turnTo(P, Math.atan2(mv.y, mv.x), 16, dt);
+        if (P.lock) turnTo(P, Math.atan2(P.lock.y - P.y, P.lock.x - P.x), 14, dt);
+        else if (mv.m > 0.1) turnTo(P, Math.atan2(mv.y, mv.x), 13, dt);
+        break;
+      }
+      case 'charge': {
+        P.vx += (mv.x * PL.speed * 0.35 - P.vx) * moveK;
+        P.vy += (mv.y * PL.speed * 0.35 - P.vy) * moveK;
+        turnTo(P, P.lock ? Math.atan2(P.lock.y - P.y, P.lock.x - P.x) : (mv.m > 0.1 ? Math.atan2(mv.y, mv.x) : P.face), 8, dt);
+        const lv = P.t < 0.35 ? 1 : P.t < 0.75 ? 2 : 3;
+        if (lv > P.chargeLv) {
+          P.chargeLv = lv; Sound.play('pickup'); vibrate(12);
+          G.rings.push({ x: P.x, y: P.y, r: 10, max: 60 + lv * 20, t: 0, dur: 0.25, color: lv === 3 ? '255,120,60' : '255,220,160' });
         }
+        if (!Input.held.heavy || P.t >= CHARGE_MAX) startHeavy(mv, P.chargeLv, P.t);
+        break;
+      }
+      case 'execute': {
+        const e = P.execTarget;
+        P.vx *= Math.exp(-12 * dt); P.vy *= Math.exp(-12 * dt);
+        if (e && !e.dead) {
+          P.face = Math.atan2(e.y - P.y, e.x - P.x);
+          const d = len(e.x - P.x, e.y - P.y), want = P.r + e.r + 14;
+          if (d > want) { const k = Math.min(1, dt * 12); P.x += (e.x - P.x) / d * (d - want) * k; P.y += (e.y - P.y) / d * (d - want) * k; }
+        }
+        if (!P.execDone && P.t >= EXEC.hitT) {
+          P.execDone = true;
+          if (e && !e.dead) {
+            const ang = Math.atan2(e.y - P.y, e.x - P.x);
+            e.state = 'stun'; // garante o bônus de atordoado
+            damageEnemy(e, Math.max(60, e.maxHp * 0.55) / 1.6, ang, 700, 999, { stop: 0.14, heavy: true, exec: true });
+            addRage(20);
+            shake(0.6); vibrate(40);
+            G.rings.push({ x: e.x, y: e.y, r: 10, max: 110, t: 0, dur: 0.35, color: '255,207,74' });
+          }
+        }
+        if (P.t >= EXEC.dur) { P.state = 'idle'; P.execTarget = null; }
+        break;
+      }
+      case 'rage': {
+        P.vx *= Math.exp(-6 * dt); P.vy *= Math.exp(-6 * dt);
+        P.vx += mv.x * PL.speed * 1.5 * dt; P.vy += mv.y * PL.speed * 1.5 * dt;
+        if (P.pulse < RAGE.pulses.length && P.t >= RAGE.pulses[P.pulse]) { ragePulse(P.pulse); P.pulse++; }
+        if (P.t >= RAGE.dur) { P.state = 'idle'; P.threat = null; }
         break;
       }
       case 'attack': {
@@ -580,21 +766,23 @@
         break;
       }
       case 'heavy': {
-        const aEnd = HEAVY.wind + HEAVY.active, total = aEnd + HEAVY.rec;
-        if (P.t < HEAVY.wind) {
+        const HV = P.hv;
+        const aEnd = HV.wind + HV.active, total = aEnd + HV.rec;
+        if (P.t < HV.wind) {
           P.vx += (mv.x * PL.speed * 0.3 - P.vx) * moveK;
           P.vy += (mv.y * PL.speed * 0.3 - P.vy) * moveK;
         } else {
           P.vx *= Math.exp(-10 * dt); P.vy *= Math.exp(-10 * dt);
         }
-        if (P.t >= HEAVY.wind && !P.lunged) {
+        if (P.t >= HV.wind && !P.lunged) {
           P.lunged = true;
           Sound.play('heavy');
-          shake(0.35);
-          G.slashes.push({ side: 1, face: P.face, arc: TAU, range: HEAVY.range, t: 0, dur: HEAVY.active + 0.14, heavy: true });
-          G.rings.push({ x: P.x, y: P.y, r: 20, max: HEAVY.range + 20, t: 0, dur: 0.3, color: '255,220,160' });
+          shake(0.25 + HV.lv * 0.12);
+          G.slashes.push({ side: 1, face: P.face, arc: TAU, range: HV.range, t: 0, dur: HV.active + 0.14, heavy: true, lv: HV.lv });
+          G.rings.push({ x: P.x, y: P.y, r: 20, max: HV.range + 20, t: 0, dur: 0.3, color: HV.lv === 3 ? '255,120,60' : '255,220,160' });
+          if (HV.lv > 1) addText(P.x, P.y - 34, 'CARREGADO ' + HV.lv, HV.lv === 3 ? '#ff7a3c' : '#ffe27a', 14);
         }
-        if (P.t >= HEAVY.wind && P.t < aEnd) heavyHits();
+        if (P.t >= HV.wind && P.t < aEnd) heavyHits();
         if (P.t >= total) { P.state = 'idle'; P.threat = null; }
         break;
       }
@@ -605,7 +793,7 @@
         P.ghostT -= dt;
         if (P.ghostT <= 0) { P.ghostT = 0.022; G.ghosts.push({ x: P.x, y: P.y, r: P.r, face: P.face, life: 0.22, max: 0.22, color: '90,176,255' }); }
         if (P.t >= PL.dashTime) {
-          P.state = 'idle';
+          P.state = 'idle'; P.sinceDash = 0;
           P.vx *= 0.45; P.vy *= 0.45;
         }
         break;
@@ -646,17 +834,31 @@
     }
   }
   function heavyHits() {
+    const HV = P.hv;
     for (const e of G.enemies) {
       if (e.dead || e.state === 'spawn' || P.hitSet.has(e) || e.iframe > 0) continue;
       const dx = e.x - P.x, dy = e.y - P.y, d = len(dx, dy);
-      if (d > HEAVY.range + e.r) continue;
+      if (d > HV.range + e.r) continue;
       P.hitSet.add(e);
-      if (damageEnemy(e, HEAVY.dmg, Math.atan2(dy, dx), HEAVY.kb, HEAVY.poise, { stop: HEAVY.stop, heavy: true })) P.confirm = true;
+      if (damageEnemy(e, HV.dmg, Math.atan2(dy, dx), HV.kb, HV.poise, { stop: HV.stop, heavy: true })) P.confirm = true;
     }
     for (const pr of G.projectiles) {
       if (pr.friendly || pr.dead) continue;
-      if (len(pr.x - P.x, pr.y - P.y) < HEAVY.range + 10) reflectProjectile(pr);
+      if (len(pr.x - P.x, pr.y - P.y) < HV.range + 10) reflectProjectile(pr);
     }
+  }
+  // Fúria: três ondas de choque ao redor
+  function ragePulse(i) {
+    G.rings.push({ x: P.x, y: P.y, r: 20, max: RAGE.radius + 30, t: 0, dur: 0.35, color: '255,90,60' });
+    burst(P.x, P.y, 0, 26, '#ff6a3c', 520, true);
+    shake(0.35); Sound.play('slam'); vibrate(20);
+    for (const e of G.enemies) {
+      if (e.dead || e.state === 'spawn') continue;
+      const dx = e.x - P.x, dy = e.y - P.y, d = len(dx, dy);
+      if (d > RAGE.radius + e.r) continue;
+      damageEnemy(e, RAGE.dmg + i * 4, Math.atan2(dy, dx), RAGE.kb, 80, { stop: 0.05, heavy: true, rage: true });
+    }
+    for (const pr of G.projectiles) if (!pr.friendly && !pr.dead && len(pr.x - P.x, pr.y - P.y) < RAGE.radius + 20) reflectProjectile(pr);
   }
 
   // Retorna 'parry' | 'dodge' | 'hit' | 'none'
@@ -667,7 +869,7 @@
     if (P.iframe > 0) {
       if (P.state === 'dash' && !P.dodged) { // esquiva perfeita
         P.dodged = true;
-        slowmo(0.35, 0.35);
+        slowmo(0.35, 0.35); addRage(10);
         P.st = Math.min(P.maxSt, P.st + 15);
         addText(P.x, P.y - 30, 'ESQUIVA!', '#8fd3ff', 16);
       }
@@ -705,7 +907,7 @@
     hitstop(0.13, P, e); slowmo(0.5, 0.3); shake(0.35);
     P.st = Math.min(P.maxSt, P.st + 35);
     P.parryT = 0; P.state = 'idle';
-    G.parries++;
+    G.parries++; addRage(18);
     burst(x, y, 0, 22, '#ffe27a', 420, true);
     G.rings.push({ x, y, r: 6, max: 70, t: 0, dur: 0.25, color: '255,226,122' });
     Sound.play('parry'); vibrate(25);
@@ -1186,6 +1388,7 @@
     addText(e.x + rand(-8, 8), e.y - e.r - 10, crit ? dmg + '!' : String(dmg), crit ? '#ffe27a' : '#ffffff', crit ? 19 : 14);
     Sound.play(crit || o.finisher || o.heavy ? 'crit' : 'hit');
     if (!o.fromEnemy) {
+      if (!o.rage) addRage(dmg * 0.32);
       G.combo++; G.comboT = 2.4;
       G.bestCombo = Math.max(G.bestCombo, G.combo);
       vibrate(8);
@@ -1196,6 +1399,7 @@
 
   function killEnemy(e, ang) {
     e.dead = true; e.token = false;
+    if (P.lock === e) P.lock = null;
     const T = TYPES[e.type];
     const mult = 1 + Math.floor(G.combo / 10) * 0.5;
     const pts = Math.round(T.score * (e.elite ? 3 : 1) * mult);
@@ -1249,7 +1453,7 @@
         }
       }
     }
-    G.projectiles = G.projectiles.filter((p) => !p.dead);
+    sweep(G.projectiles, alivePr);
   }
   function updateOrbs(dt) {
     for (const o of G.orbs) {
@@ -1268,7 +1472,7 @@
       }
       if (o.t > 14) o.dead = true;
     }
-    G.orbs = G.orbs.filter((o) => !o.dead);
+    sweep(G.orbs, alivePr);
   }
 
   // =========================================================================
@@ -1356,24 +1560,24 @@
       p.vh -= 900 * dt; p.h += p.vh * dt;
       if (p.h < 0) { p.h = 0; p.vh *= -0.35; p.vx *= 0.6; p.vy *= 0.6; } // quica no chão
     }
-    G.particles = G.particles.filter((p) => p.life > 0);
+    sweep(G.particles, liveP);
     for (const t of G.texts) { t.life -= dt; t.h += 45 * dt; }
-    G.texts = G.texts.filter((t) => t.life > 0);
+    sweep(G.texts, liveP);
     if (!(P.freeze > 0)) for (const s of G.slashes) s.t += dt; // o rastro congela junto com o golpe
-    G.slashes = G.slashes.filter((s) => s.t < s.dur + 0.12);
+    sweep(G.slashes, (s) => s.t < s.dur + 0.12);
     for (const g of G.ghosts) g.life -= dt;
-    G.ghosts = G.ghosts.filter((g) => g.life > 0);
+    sweep(G.ghosts, liveP);
     for (const r of G.rings) r.t += dt;
-    G.rings = G.rings.filter((r) => r.t < r.dur);
+    sweep(G.rings, (r) => r.t < r.dur);
   }
 
   // =========================================================================
   // Passo de simulação
   // =========================================================================
   function savePrev() {
-    P.px = P.x; P.py = P.y;
+    P.px = P.x; P.py = P.y; P.pface = P.face;
     cam.px = cam.x; cam.py = cam.y;
-    for (const e of G.enemies) { e.px = e.x; e.py = e.y; }
+    for (const e of G.enemies) { e.px = e.x; e.py = e.y; e.pface = e.face; }
     for (const p of G.projectiles) { p.px = p.x; p.py = p.y; }
     for (const o of G.orbs) { o.px = o.x; o.py = o.y; }
   }
@@ -1401,16 +1605,14 @@
     resolveBodies();
     updateProjectiles(sdt);
     updateOrbs(sdt);
-    G.enemies = G.enemies.filter((e) => !e.dead);
+    sweep(G.enemies, alivePr);
     updateWaves(sdt);
     updateFx(sdt);
 
-    // Câmera com antecipação do movimento
-    const tx = P.x + P.vx * 0.12, ty = P.y + P.vy * 0.12;
-    const k = expK(7, dt);
-    cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k;
-    cam.x = clamp(cam.x, -ARENA.w / 2 + 260, ARENA.w / 2 - 260);
-    cam.y = clamp(cam.y, -ARENA.h / 2 + 200, ARENA.h / 2 - 120);
+    // Câmera em terceira pessoa: segue o jogador de perto (tempo real, não desacelera)
+    const k = expK(16, dt);
+    cam.x += (P.x - cam.x) * k; cam.y += (P.y - cam.y) * k;
+    updateCameraLogic(dt);
 
     if (G.overT > 0) {
       G.overT -= dt;
@@ -1429,7 +1631,7 @@
   const renderer = new THREE.WebGLRenderer({ canvas: worldCanvas, antialias: true, powerPreference: 'high-performance' });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.3;
+  renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -1438,17 +1640,6 @@
   scene.background = FOG;
   scene.fog = new THREE.Fog(FOG, 30, 70);
   const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
-  const CAM_PITCH = 0.98; // ~56° de inclinação
-  let camDist = 22;
-  onResize = () => {
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, LOW ? 1.5 : 2));
-    renderer.setSize(W, H, false);
-    camera.aspect = W / H;
-    camera.updateProjectionMatrix();
-    // Área visível de ~12,5 unidades na menor dimensão (um pouco mais perto em telas pequenas).
-    camDist = (Math.min(W, H) < 500 ? 10.5 : 12.5) / (2 * Math.tan(THREE.MathUtils.degToRad(20)) * clamp(W / H, 0.62, 1));
-  };
-  onResize();
 
   // ---------- Iluminação ----------
   (function buildEnvironmentMap() {
@@ -1471,8 +1662,9 @@
     scene.environment = pm.fromScene(es, 0.03).texture;
     pm.dispose();
   })();
-  scene.add(new THREE.HemisphereLight('#90a4dc', '#2b2019', 0.85));
-  const sun = new THREE.DirectionalLight('#ffd9b0', 2.3);
+  const hemi = new THREE.HemisphereLight('#8fa2d8', '#3a2a20', 0.7);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight('#ffd6a8', 2.0);
   sun.castShadow = true;
   sun.shadow.mapSize.set(LOW ? 1024 : 2048, LOW ? 1024 : 2048);
   Object.assign(sun.shadow.camera, { left: -19, right: 19, top: 17, bottom: -17, near: 1, far: 70 });
@@ -1538,6 +1730,7 @@
   }
 
   // ---------- Arena ----------
+  const ENV_START = scene.children.length; // tudo daqui até o entulho é o cenário procedural (reserva)
   const AW = ARENA.w * U, AH = ARENA.h * U;
   const floorTex = canvasTex(512, (g, S) => stones(g, S, 4, [1, 0.97, 1.04]));
   floorTex.repeat.set(AW / 6, AH / 6);
@@ -1711,6 +1904,8 @@
     rub.castShadow = rub.receiveShadow = true;
     scene.add(rub);
   }
+
+  const PROC_ENV = scene.children.slice(ENV_START);
 
   // =========================================================================
   // Personagens articulados
@@ -2060,14 +2255,17 @@
         snap = P.t < a.wind + a.active;
         break;
       }
-      case 'heavy': {
+      case 'charge': case 'heavy': case 'rage': {
+        const H = P.state === 'heavy' ? P.hv : { wind: P.state === 'charge' ? 9 : 0, active: RAGE.dur };
         T.rx = -1.45; T.rOut = 0; T.re = -0.15; T.rh = -0.1;
         T.lx = -0.6; T.lOut = 0.7; T.le = -0.4;
-        if (P.t < HEAVY.wind) {
-          const p = P.t / HEAVY.wind, rel = 1.4 + 0.9 * p;
+        if (P.t < H.wind) {
+          const p = Math.min(1, P.t / Math.min(H.wind, CHARGE_MAX)), rel = 1.4 + 0.9 * p;
           T.sYaw = -rel * 0.3; T.ry = -rel * 0.7; T.bY = -0.1 * p; T.split = 0.3;
-        } else if (P.t < HEAVY.wind + HEAVY.active) {
-          const p = (P.t - HEAVY.wind) / HEAVY.active;
+        } else if (P.state === 'rage') {
+          T.yaw = -((P.t * 12) % TAU); T.sYaw = -0.7; T.ry = -1.6; snap = true;
+        } else if (P.t < H.wind + H.active) {
+          const p = (P.t - H.wind) / H.active;
           T.sYaw = -2.3 * 0.3; T.ry = -2.3 * 0.7;
           T.yaw = -TAU * easeOut(p); T.bY = -0.08; T.split = 0.3;
           snap = true;
@@ -2076,6 +2274,9 @@
         }
         break;
       }
+      case 'execute':
+        T.rx = P.t < EXEC.hitT ? -2.8 : -1.0; T.re = -0.2; T.rh = -0.2; T.lean = P.t < EXEC.hitT ? -0.1 : 0.35; T.bY = -0.08;
+        break;
       case 'dash':
         heading = Math.atan2(P.dashY, P.dashX);
         T.lean = 0.5; T.bY = -0.04;
@@ -2275,7 +2476,7 @@
   const ASSET_BASE = 'assets/';
   // Página autocontida: modelos (JSON) e texturas (data URI) podem vir embutidos em window.__ASSETS
   const EMBED = window.__ASSETS || null;
-  const BUILD = 'build 4';
+  const BUILD = 'build 5 · terceira pessoa';
   const MODEL_DEFS = {
     player: { file: 'knight.glb', h: 1.85, idle: 'Idle' },
     grunt: { file: 'skeleton_warrior.glb', h: 1.8, idle: 'Idle_Combat', right: 'skeleton_blade.glb', left: 'skeleton_shield.glb', undead: true },
@@ -2293,6 +2494,7 @@
     '2H_Melee_Attack_Spin': [0.05, 0.24, 0.56, 0.85],
     '2H_Melee_Attack_Chop': [0.1, 0.48, 0.54, 0.9],
     '2H_Melee_Attack_Stab': [0, 0.2, 0.27, 0.85],
+    '1H_Melee_Attack_Stab': [0.05, 0.2, 0.28, 0.6],
     Dualwield_Melee_Attack_Stab: [0.05, 0.2, 0.27, 0.6],
     Dualwield_Melee_Attack_Slice: [0.15, 0.43, 0.55, 0.9],
   };
@@ -2307,7 +2509,7 @@
     }
     const loader = new EX.GLTFLoader();
     if (EX.MeshoptDecoder) loader.setMeshoptDecoder(EX.MeshoptDecoder);
-    const files = [...new Set(Object.values(MODEL_DEFS).flatMap((d) => [d.file, d.right, d.left]).filter(Boolean))];
+    const files = [...new Set(Object.values(MODEL_DEFS).flatMap((d) => [d.file, d.right, d.left]).filter(Boolean)), 'dungeon.glb'];
     // embutido: GLB em base64 → ArrayBuffer (nenhuma requisição de rede)
     const b64ToBuffer = (b64) => {
       const bin = atob(b64), u8 = new Uint8Array(bin.length);
@@ -2332,22 +2534,6 @@
       .finally(() => { MODELS.settled = true; });
   })();
 
-  // Texturas de pedra (Poly Haven, CC0) por cima das procedurais
-  if (canLoadAssets) {
-    const tl = new THREE.TextureLoader();
-    const load = (f, srgb, cb) => tl.load(EMBED && EMBED[f] ? EMBED[f] : ASSET_BASE + f, (t) => {
-      t.wrapS = t.wrapT = THREE.RepeatWrapping;
-      t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-      if (srgb) t.colorSpace = THREE.SRGBColorSpace;
-      cb(t);
-    }, undefined, () => {});
-    const FR = [AW / 2.6, AH / 2.6];
-    load('floor_color.jpg', true, (t) => { t.repeat.set(...FR); floor.material.map = t; floor.material.color.set('#8c8a8f'); floor.material.needsUpdate = true; });
-    load('floor_normal.jpg', false, (t) => { t.repeat.set(...FR); floor.material.normalMap = t; floor.material.normalScale.set(0.9, 0.9); floor.material.needsUpdate = true; });
-    load('wall_color.jpg', true, (t) => { for (const m of [wallMat, stoneMat]) { m.map = t; m.color.set('#cfcac6'); m.needsUpdate = true; } });
-    load('wall_normal.jpg', false, (t) => { for (const m of [wallMat, stoneMat]) { m.normalMap = t; m.needsUpdate = true; } });
-  }
-
   function buildModelView(kind, elite) {
     const def = MODEL_DEFS[kind], g = MODELS.gltf[def.file];
     const model = EX.SkeletonUtils.clone(g.scene);
@@ -2358,6 +2544,16 @@
     };
     attach('handslotr', def.right);
     attach('handslotl', def.left);
+    // Todas as partes do personagem usam UM esqueleto: uma textura de ossos por personagem
+    // (em vez de uma por peça) → bem menos envio para a GPU a cada quadro.
+    const skels = [];
+    model.traverse((o) => {
+      if (!o.isSkinnedMesh) return;
+      const sk = o.skeleton;
+      const same = skels.find((k) => k.bones.length === sk.bones.length && k.bones.every((b, i) => b === sk.bones[i])
+        && k.boneInverses.every((m, i) => m.equals(sk.boneInverses[i])));
+      if (same) o.bind(same, o.bindMatrix); else skels.push(sk);
+    });
     const mats = [];
     model.traverse((o) => {
       if (!o.isMesh) return;
@@ -2473,6 +2669,9 @@
     for (const m of v.mats) {
       if (mode === 'flash') { m.emissive.set('#ffffff'); m.emissiveIntensity = 0.42; }
       else if (mode === 'parry') { m.emissive.set('#ffc83a'); m.emissiveIntensity = 0.55; }
+      else if (mode === 'rage') { m.emissive.set('#ff3a1a'); m.emissiveIntensity = 0.5; }
+      else if (mode === 'charge2') { m.emissive.set('#ffd27a'); m.emissiveIntensity = 0.25; }
+      else if (mode === 'charge3') { m.emissive.set('#ff7a3c'); m.emissiveIntensity = 0.45; }
       else { m.emissive.copy(m.userData.e0); m.emissiveIntensity = m.userData.ei0; }
     }
   }
@@ -2504,13 +2703,19 @@
     }
     switch (P.state) {
       case 'attack': {
-        const a = P.atk, name = COMBO_CLIPS[P.comboIdx] || COMBO_CLIPS[0];
+        const a = P.atk, name = P.atkKind === 'dash' ? '1H_Melee_Attack_Stab' : (COMBO_CLIPS[P.comboIdx] || COMBO_CLIPS[0]);
         scrub(v, name, P.t, [0, a.wind, a.wind + a.active, a.wind + a.active + a.rec], MARKS[name], 0.06, v.alt);
         break;
       }
-      case 'heavy':
-        scrub(v, '2H_Melee_Attack_Spin', P.t, [0, HEAVY.wind, HEAVY.wind + HEAVY.active, HEAVY.wind + HEAVY.active + HEAVY.rec], MARKS['2H_Melee_Attack_Spin'], 0.06, v.alt);
+      case 'charge': scrub(v, '2H_Melee_Attack_Spin', P.t, [0, CHARGE_MAX], [0.05, 0.22], 0.08, v.alt); break;
+      case 'heavy': {
+        const H = P.hv, M = MARKS['2H_Melee_Attack_Spin'];
+        const start = 0.05 + 0.17 * clamp((HEAVY.wind - H.wind) / CHARGE_MAX, 0, 1); // continua da pose da carga
+        scrub(v, '2H_Melee_Attack_Spin', P.t, [0, H.wind, H.wind + H.active, H.wind + H.active + H.rec], [start, M[1], M[2], M[3]], 0.06, v.alt);
         break;
+      }
+      case 'execute': scrub(v, '1H_Melee_Attack_Chop', P.t, [0, EXEC.hitT - 0.06, EXEC.hitT + 0.06, EXEC.dur], [0.15, 0.49, 0.58, 0.95], 0.06, v.alt); break;
+      case 'rage': loopAnim(v, '2H_Melee_Attack_Spinning', 1.6, 0.08); break;
       case 'dash': scrub(v, v.dashClip, P.t, [0, PL.dashTime], [0.02, 0.85], 0.05, v.alt); break;
       case 'parry': scrub(v, 'Block', P.t, [0, 0.08, PL.parryTime], [0.02, 0.25, 0.4], 0.04, v.alt); break;
       case 'hurt': scrub(v, 'Hit_A', P.t, [0, 0.26], [0, 0.6], 0.04, v.alt); break;
@@ -2518,9 +2723,10 @@
       default: locomotion(v, P.vx, P.vy, P.face, v.def.idle);
     }
     v.mixer.update(dt);
-    v.root.rotation.y = Math.PI / 2 - P.face;
+    v.root.rotation.y = Math.PI / 2 - faceOf(P);
     applyFlinch(v, P, P.face);
-    tint(v, P.parryT > 0 ? 'parry' : (P.iframe > 0 && P.state === 'hurt' && Math.floor(G.time * 20) % 2 === 0 ? 'flash' : 'none'));
+    tint(v, P.state === 'rage' ? 'rage' : P.parryT > 0 ? 'parry' : P.state === 'charge' && P.chargeLv > 1 ? 'charge' + P.chargeLv
+      : (P.iframe > 0 && P.state === 'hurt' && Math.floor(G.time * 20) % 2 === 0 ? 'flash' : 'none'));
   }
 
   const MODEL_ANIM = {
@@ -2582,7 +2788,7 @@
       }
     }
     v.mixer.update(dt);
-    v.root.rotation.y = Math.PI / 2 - e.face;
+    v.root.rotation.y = Math.PI / 2 - faceOf(e);
     v.root.position.y = e.state === 'spawn' && !def.undead ? -v.height * 1.05 * (1 - easeOut(p)) : 0;
     if (v.aura) v.aura.rotation.y += dt * 1.5;
     applyFlinch(v, e, e.face);
@@ -2639,10 +2845,12 @@
     if (!MODELS.settled) btns.forEach((b) => { b.disabled = true; b.dataset.label = b.textContent; b.textContent = 'CARREGANDO…'; });
     modelsPromise.then((ok) => {
       if (ok) {
+        try { buildDungeon(MODELS.gltf['dungeon.glb']); } catch (err) { console.warn('Cenário 3D indisponível', err); }
         disposeView(playerView);
         playerView = buildView('player');
         scene.add(playerView.root);
         if (G.state === 'menu') buildMenuLineup();
+        try { renderer.compile(scene, camera); } catch (_) { /* opcional */ }
       }
       btns.forEach((b) => { b.disabled = false; if (b.dataset.label) b.textContent = b.dataset.label; });
       // selo de versão + status dos modelos (deixa claro qual build abriu)
@@ -2756,7 +2964,7 @@
         const start = s.face - s.side * s.arc / 2, end = start + s.side * s.arc * easeOut(p);
         a0 = Math.min(start, end); a1 = Math.max(start, end); lead = s.side > 0 ? 1 : 0;
       }
-      _c.set(s.heavy ? '#ffc98a' : s.big ? '#ffe7b0' : '#8cc8ff');
+      _c.set(s.heavy ? (s.lv === 3 ? '#ff7a3c' : '#ffc98a') : s.big ? '#ffe7b0' : '#8cc8ff');
       const r1 = s.range * 0.3 * U, r2 = (s.range + (s.big ? 8 : 2)) * U;
       const h = s.heavy ? 0.95 : 1.3;
       const pos = m.geometry.attributes.position.array, col = m.geometry.attributes.color.array;
@@ -2858,32 +3066,332 @@
   }
 
   // =========================================================================
+  // Terceira pessoa: câmera com colisão, cenário (KayKit Dungeon, CC0) e desempenho
+  // =========================================================================
+  const GUTTER = 5; // corredor entre a cerca da arena e as muralhas
+  const OUT_W = Math.ceil((AW + GUTTER * 2) / 4) * 4, OUT_H = Math.ceil((AH + GUTTER * 2) / 4) * 4;
+  const WALL_SY = 1.3; // muralhas um pouco mais altas que a peça original
+  let camDistCur = CAMERA.dist;
+
+  // Governador de desempenho: mede o FPS real e ajusta resolução → sombras/luzes para ficar ≥ 40 FPS.
+  const PERF = {
+    basePR: Math.min(window.devicePixelRatio || 1, LOW ? 1.5 : 2),
+    scale: LOW ? 0.85 : 1, minScale: 0.5, tier: LOW ? 1 : 2,
+    frames: 0, time: 0, fps: 60, cool: 1.5,
+  };
+  const torchLights = [];
+  function applyPixelRatio() {
+    renderer.setPixelRatio(PERF.basePR * PERF.scale);
+    renderer.setSize(W, H, false);
+  }
+  function setTier(t) {
+    PERF.tier = t;
+    for (const L of torchLights) L.visible = t >= 2;
+    const sh = t >= 1;
+    if (renderer.shadowMap.enabled !== sh) {
+      renderer.shadowMap.enabled = sh;
+      sun.castShadow = sh;
+      scene.traverse((o) => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { m.needsUpdate = true; }); });
+    }
+  }
+  function perfTick(rdt) {
+    PERF.frames++; PERF.time += rdt; PERF.cool -= rdt;
+    if (PERF.time < 0.5) return;
+    PERF.fps = PERF.frames / PERF.time;
+    PERF.frames = 0; PERF.time = 0;
+    if (document.hidden || PERF.cool > 0) return;
+    if (PERF.fps < 52) {
+      if (PERF.scale > PERF.minScale + 0.001) { PERF.scale = Math.max(PERF.minScale, PERF.scale - (PERF.fps < 40 ? 0.15 : 0.08)); applyPixelRatio(); PERF.cool = 0.7; }
+      else if (PERF.tier > 0) { setTier(PERF.tier - 1); PERF.cool = 1.5; }
+    } else if (PERF.fps > 58 && PERF.scale < 1) {
+      PERF.scale = Math.min(1, PERF.scale + 0.05); applyPixelRatio(); PERF.cool = 3;
+    }
+  }
+  onResize = () => {
+    applyPixelRatio();
+    camera.aspect = W / H;
+    camera.fov = W / H < 1 ? 70 : 55; // retrato: campo de visão maior
+    camera.updateProjectionMatrix();
+  };
+  onResize();
+  setTier(PERF.tier);
+
+  // Câmera atrás do ombro direito; recua até não atravessar muralha nem coluna.
+  function thirdPersonCamera(tx, tz, rdt) {
+    const yaw = CAMERA.yaw, pitch = CAMERA.pitch;
+    const fx = Math.cos(yaw), fz = Math.sin(yaw);
+    const rx = -fz, rz = fx;
+    const oy = 1.55, ox = tx + rx * 0.55, oz = tz + rz * 0.55;
+    const cp = Math.cos(pitch), bx = -fx * cp, by = Math.sin(pitch), bz = -fz * cp;
+    let d = CAMERA.dist;
+    const limX = OUT_W / 2 - 0.9, limZ = OUT_H / 2 - 0.9;
+    if (bx > 1e-4) d = Math.min(d, (limX - ox) / bx); else if (bx < -1e-4) d = Math.min(d, (-limX - ox) / bx);
+    if (bz > 1e-4) d = Math.min(d, (limZ - oz) / bz); else if (bz < -1e-4) d = Math.min(d, (-limZ - oz) / bz);
+    const hl = Math.max(cp, 1e-4), ux = bx / hl, uz = bz / hl;
+    for (const p of PILLARS) {
+      const px = p.x * U - ox, pz = p.y * U - oz, R = p.r * U + 0.45;
+      const proj = px * ux + pz * uz;
+      if (proj <= 0) continue;
+      const perp2 = px * px + pz * pz - proj * proj;
+      if (perp2 > R * R) continue;
+      const t = (proj - Math.sqrt(R * R - perp2)) / hl;
+      if (t > 0 && oy + by * t < 4.6) d = Math.min(d, t - 0.25);
+    }
+    d = Math.max(d, 1.1);
+    camDistCur += (d - camDistCur) * expK(d < camDistCur ? 30 : 4, rdt); // aproxima rápido, afasta suave
+    const sh = G.trauma * G.trauma * 0.35;
+    camera.position.set(ox + bx * camDistCur + (sh ? rand(-1, 1) * sh : 0), oy + by * camDistCur + (sh ? rand(-1, 1) * sh : 0), oz + bz * camDistCur);
+    camera.lookAt(ox + fx * 2.5, oy - 0.25 - pitch * 0.6, oz + fz * 2.5);
+  }
+
+  // Céu noturno simples (estrelas) — barato e dá profundidade acima das muralhas
+  {
+    const N = 700, pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      const a = rand(0, TAU), el = rand(0.12, 1.4), r = 90;
+      pos[i * 3] = Math.cos(a) * Math.cos(el) * r; pos[i * 3 + 1] = Math.sin(el) * r; pos[i * 3 + 2] = Math.sin(a) * Math.cos(el) * r;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const stars = new THREE.Points(g, new THREE.PointsMaterial({ color: '#cdd6ff', size: 0.35, sizeAttenuation: true, fog: false, transparent: true, opacity: 0.8, depthWrite: false }));
+    scene.add(stars);
+    const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: '#b9c8ff', fog: false, transparent: true, opacity: 0.9, depthWrite: false }));
+    moon.position.set(-45, 55, -60); moon.scale.set(16, 16, 1);
+    scene.add(moon);
+  }
+
+  // Marcador do alvo travado (anel dourado no chão)
+  const lockRing = new THREE.Mesh(geo('lockRing', () => new THREE.RingGeometry(0.8, 0.95, 48).rotateX(-Math.PI / 2)),
+    new THREE.MeshBasicMaterial({ color: '#ffcf4a', transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  lockRing.visible = false;
+  scene.add(lockRing);
+
+  // ---------- Cenário montado com peças instanciadas ----------
+  const dungeonFlames = [];
+  function seeded(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+  function buildDungeon(g) {
+    const pieces = {};
+    for (const c of g.scene.children) pieces[c.name] = c;
+    g.scene.updateMatrixWorld(true);
+    const R = seeded(1337);
+    const inst = {};
+    const put = (name, x, y, z, ry, s, sy) => { (inst[name] = inst[name] || []).push([x, y, z, ry || 0, s || 1, sy || s || 1]); };
+
+    // piso: lajotas na arena, terra no corredor
+    for (let x = -OUT_W / 2 + 2; x < OUT_W / 2; x += 4) {
+      for (let z = -OUT_H / 2 + 2; z < OUT_H / 2; z += 4) {
+        const inArena = Math.abs(x) < AW / 2 + 0.01 && Math.abs(z) < AH / 2 + 0.01;
+        put(inArena ? 'floor_tile_large' : 'floor_dirt_large', x, -0.05, z, Math.floor(R() * 4) * Math.PI / 2, 1);
+      }
+    }
+    // cerca baixa = limite da luta
+    const fence = (x0, z0, x1, z1, ry) => {
+      const L = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(L / 4));
+      for (let i = 0; i < n; i++) {
+        const f = (i + 0.5) / n;
+        put('barrier', lerp(x0, x1, f), 0, lerp(z0, z1, f), ry, 1, 1);
+        if (i > 0) put('barrier_column', lerp(x0, x1, i / n), 0, lerp(z0, z1, i / n), 0, 1);
+      }
+    };
+    const ax = AW / 2 + 0.25, az = AH / 2 + 0.25;
+    fence(-ax, -az, ax, -az, 0); fence(-ax, az, ax, az, 0);
+    fence(-ax, -az, -ax, az, Math.PI / 2); fence(ax, -az, ax, az, Math.PI / 2);
+    for (const [cx, cz] of [[-ax, -az], [ax, -az], [-ax, az], [ax, az]]) put('barrier_column', cx, 0, cz, 0, 1.15);
+
+    // muralhas, com colunas a cada 4 peças, tochas e estandartes
+    const torchSpots = [];
+    const wallRun = (count, pos, ry, inward) => {
+      for (let i = 0; i < count; i++) {
+        const [x, z] = pos(i);
+        const kind = i % 4 === 0 ? 'wall_pillar' : (R() < 0.18 ? 'wall_cracked' : R() < 0.12 ? 'wall_arched' : 'wall');
+        put(kind, x, 0, z, ry, 1, WALL_SY);
+        if (i % 4 === 2) torchSpots.push([x + inward[0] * 0.55, 2.8, z + inward[1] * 0.55, ry]);
+        else if (i % 4 === 0 && i > 0 && i < count - 1) put(R() < 0.5 ? 'banner_patternA_red' : 'banner_shield_red', x + inward[0] * 0.3, 0.9, z + inward[1] * 0.3, ry, 1);
+      }
+    };
+    const nx = OUT_W / 4, nz = OUT_H / 4;
+    wallRun(nx, (i) => [-OUT_W / 2 + 2 + i * 4, -OUT_H / 2], 0, [0, 1]);
+    wallRun(nx, (i) => [OUT_W / 2 - 2 - i * 4, OUT_H / 2], Math.PI, [0, -1]);
+    wallRun(nz, (i) => [-OUT_W / 2, OUT_H / 2 - 2 - i * 4], Math.PI / 2, [1, 0]);
+    wallRun(nz, (i) => [OUT_W / 2, -OUT_H / 2 + 2 + i * 4], -Math.PI / 2, [-1, 0]);
+    for (const [x, y, z, ry] of torchSpots) {
+      put('torch_mounted', x, y - 0.3, z, ry, 1.2);
+      const f = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: '#ff8a2a', transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const fx = x + Math.sin(ry) * 0.35, fz = z + Math.cos(ry) * 0.35;
+      f.position.set(fx, y + 0.65, fz); f.scale.set(1.6, 1.6, 1);
+      scene.add(f);
+      dungeonFlames.push({ f, seed: R() * 10 });
+    }
+    // só algumas tochas têm luz de verdade (as mais próximas do centro de cada muralha)
+    const lit = torchSpots.filter((_, i) => i % 3 === 1).slice(0, 6);
+    for (const [x, y, z, ry] of lit) {
+      const L = new THREE.PointLight('#ff9a4a', 22, 16, 1.6);
+      L.position.set(x + Math.sin(ry) * 1.1, y + 0.6, z + Math.cos(ry) * 1.1);
+      scene.add(L);
+      torchLights.push(L);
+    }
+    setTier(PERF.tier);
+
+    // objetos no corredor (fora da área de luta)
+    const props = ['barrel_large', 'barrel_small_stack', 'crates_stacked', 'keg', 'box_stacked', 'barrel_large', 'crates_stacked'];
+    const scatter = (count, pt) => {
+      for (let i = 0; i < count; i++) {
+        const [x, z] = pt(i, R());
+        const name = props[Math.floor(R() * props.length)];
+        put(name, x, 0, z, R() * TAU, name === 'box_stacked' ? 0.62 : 0.8);
+      }
+    };
+    const gIn = (a) => a + 0.9 + R() * (GUTTER - 2.2); // distância da cerca, dentro do corredor
+    scatter(7, (i, r) => [-OUT_W / 2 + 5 + (i + r * 0.6) * ((OUT_W - 10) / 7), -(AH / 2 + gIn(0))]);
+    scatter(7, (i, r) => [-OUT_W / 2 + 5 + (i + r * 0.6) * ((OUT_W - 10) / 7), AH / 2 + gIn(0)]);
+    scatter(5, (i, r) => [-(AW / 2 + gIn(0)), -OUT_H / 2 + 5 + (i + r * 0.6) * ((OUT_H - 10) / 5)]);
+    scatter(5, (i, r) => [AW / 2 + gIn(0), -OUT_H / 2 + 5 + (i + r * 0.6) * ((OUT_H - 10) / 5)]);
+    put('rubble_half', -OUT_W / 2 + 2.2, 0, -OUT_H / 2 + 2.2, 0, 0.8);
+    put('rubble_large', OUT_W / 2 - 3.5, 0, OUT_H / 2 - 2.2, Math.PI, 0.7);
+    put('chest_gold', OUT_W / 2 - 3, 0, -OUT_H / 2 + 2.6, -Math.PI / 4, 0.9);
+    put('coin_stack_large', OUT_W / 2 - 4.6, 0, -OUT_H / 2 + 2.4, 0.6, 1);
+    put('sword_shield_broken', -AW / 2 - 1.3, 0.8, AH / 2 + 1.2, 0.4, 1);
+
+    // colunas da arena (as que colidem na simulação)
+    for (const p of PILLARS) {
+      if (p.r >= 40) put('pillar_decorated', p.x * U, 0, p.y * U, Math.floor(R() * 4) * Math.PI / 2, (p.r * U * 2) / 2.1);
+      else put('pillar', p.x * U, 0, p.y * U, 0, (p.r * U * 2) / 1.45);
+    }
+
+    // uma InstancedMesh por malha de cada peça
+    const CAST = new Set(['pillar_decorated', 'pillar', 'barrel_large', 'barrel_small_stack', 'crates_stacked', 'keg', 'box_stacked', 'chest_gold', 'barrier', 'barrier_column', 'wall', 'wall_pillar', 'wall_cracked', 'wall_arched', 'banner_patternA_red', 'banner_shield_red']);
+    const matCache = new Map();
+    const envMat = (m, floorish) => {
+      const key = m.uuid + (floorish ? 'f' : '');
+      if (!matCache.has(key)) {
+        let mm = LOW ? new THREE.MeshLambertMaterial({ map: m.map, color: m.color.clone() }) : m.clone(); // Lambert é mais barato no celular
+        if (floorish) mm.color.multiplyScalar(0.62); // piso mais escuro: personagens se destacam
+        else mm.color.multiplyScalar(0.85);
+        if (mm.roughness !== undefined) mm.roughness = Math.max(mm.roughness, 0.8);
+        matCache.set(key, mm);
+      }
+      return matCache.get(key);
+    };
+    const pm = new THREE.Matrix4(), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), eu = new THREE.Euler(), v3 = new THREE.Vector3(), s3 = new THREE.Vector3();
+    for (const name in inst) {
+      const piece = pieces[name];
+      if (!piece) continue;
+      const list = inst[name];
+      const inv = new THREE.Matrix4().copy(piece.matrixWorld).invert();
+      piece.traverse((o) => {
+        if (!o.isMesh) return;
+        const local = new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld);
+        const im = new THREE.InstancedMesh(o.geometry, envMat(o.material, name.startsWith('floor')), list.length);
+        list.forEach(([x, y, z, ry, s, sy], i) => {
+          pm.compose(v3.set(x, y, z), q.setFromEuler(eu.set(0, ry, 0)), s3.set(s, sy, s));
+          im.setMatrixAt(i, m4.multiplyMatrices(pm, local));
+        });
+        im.castShadow = CAST.has(name) && !name.startsWith('floor');
+        im.receiveShadow = true;
+        im.computeBoundingSphere();
+        scene.add(im);
+      });
+    }
+    // esconde o cenário procedural (fica só o círculo rúnico e o chão externo)
+    for (const o of PROC_ENV) if (o !== rune && o !== outer) o.visible = false;
+    rune.position.y = 0.03;
+    rune.material.opacity = 0.28;
+  }
+
+  // ---------- Indicadores na tela ----------
+  const _fw = new THREE.Vector3();
+  // Seta na borda para ataques vindos de fora da visão (ex.: assassino pelas costas)
+  function drawThreatArrows() {
+    camera.getWorldDirection(_fw);
+    for (const e of G.enemies) {
+      if (!(e.state === 'windup' || e.state === 'aim' || e.state === 'slamWind' || e.state === 'chargeWind')) continue;
+      const v = views.get(e);
+      if (!v) continue;
+      const [sx, sy, ok] = project(v.ix, 1.2, v.iz);
+      if (ok && sx > 30 && sx < W - 30 && sy > 30 && sy < H - 30) continue;
+      const rel = angDiff(CAMERA.yaw, Math.atan2(e.y - P.y, e.x - P.x));
+      const ex = W / 2 + Math.sin(rel) * (W / 2 - 46), ey = H / 2 - Math.cos(rel) * (H / 2 - 46);
+      const pulse = 0.6 + 0.4 * Math.sin(G.time * 18);
+      ctx.save();
+      ctx.translate(ex, ey); ctx.rotate(rel);
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle = e.state === 'slamWind' ? '#ff9a3c' : '#ff4d5e';
+      ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(14, 8); ctx.lineTo(0, 2); ctx.lineTo(-14, 8); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+  function drawLockAndCharge() {
+    if (P.lock && !P.lock.dead) {
+      const v = views.get(P.lock);
+      if (v) {
+        const [sx, sy, ok] = project(v.ix, v.height * 0.6, v.iz);
+        if (ok) {
+          const r = 16 + Math.sin(realT * 6) * 2;
+          ctx.save(); ctx.translate(sx, sy); ctx.rotate(realT * 1.5);
+          ctx.strokeStyle = '#ffcf4a'; ctx.lineWidth = 2.5;
+          for (let i = 0; i < 4; i++) { ctx.rotate(Math.PI / 2); ctx.beginPath(); ctx.moveTo(r, 0); ctx.lineTo(r + 7, -4); ctx.lineTo(r + 7, 4); ctx.closePath(); ctx.stroke(); }
+          ctx.restore();
+        }
+      }
+    }
+    if (P.state === 'charge') {
+      const [sx, sy, ok] = project(playerView.ix, 1.0, playerView.iz);
+      if (ok) {
+        const f = clamp(P.t / CHARGE_MAX, 0, 1);
+        ctx.lineWidth = 5; ctx.lineCap = 'round';
+        ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+        ctx.beginPath(); ctx.arc(sx, sy, 34, -Math.PI / 2, -Math.PI / 2 + TAU); ctx.stroke();
+        ctx.strokeStyle = P.chargeLv === 3 ? '#ff7a3c' : P.chargeLv === 2 ? '#ffe27a' : '#ffffff';
+        ctx.beginPath(); ctx.arc(sx, sy, 34, -Math.PI / 2, -Math.PI / 2 + TAU * f); ctx.stroke();
+        ctx.lineCap = 'butt';
+      }
+    }
+  }
+
+  // =========================================================================
   // Quadro
   // =========================================================================
-  let lastAnimT = 0, realT = 0;
+  let lastAnimT = 0, realT = 0, renderAlpha = 1;
+  // rosto interpolado entre passos da simulação (rotação lisa em telas de 90/120/144 Hz)
+  const faceOf = (o) => (o.pface === undefined ? o.face : o.pface + angDiff(o.pface, o.face) * renderAlpha);
   function render(alpha, rdt) {
-    realT += rdt;
+    realT += rdt; renderAlpha = alpha;
     const playing = G.state === 'play';
     let adt = 0;
     if (playing || G.state === 'over') { adt = clamp(G.time - lastAnimT, 0, 0.05); }
     else if (G.state === 'menu') adt = rdt;
     lastAnimT = G.time;
 
+    perfTick(rdt);
     // câmera
     let tx = 0, tz = 0;
     if (G.state === 'menu') {
       const a = realT * 0.12;
-      camera.position.set(Math.sin(a) * 11, 6.5, Math.cos(a) * 11);
-      camera.lookAt(0, 1.1, 0);
+      camera.position.set(Math.sin(a) * 9, 3.2, Math.cos(a) * 9);
+      camera.lookAt(0, 1.3, 0);
     } else {
       tx = lerp(cam.px, cam.x, alpha) * U;
       tz = lerp(cam.py, cam.y, alpha) * U;
-      const sh = G.trauma * G.trauma * 0.5;
-      camera.position.set(tx + (sh ? rand(-1, 1) * sh : 0), Math.sin(CAM_PITCH) * camDist + (sh ? rand(-1, 1) * sh : 0), tz + Math.cos(CAM_PITCH) * camDist);
-      camera.lookAt(tx, 0.8, tz);
+      thirdPersonCamera(tx, tz, rdt);
     }
-    sun.position.set(tx + SUN_OFF.x, SUN_OFF.y, tz + SUN_OFF.z);
-    sun.target.position.set(tx, 0, tz);
+    // a sombra acompanha o que a câmera vê (um pouco à frente do jogador)
+    const sx0 = tx + Math.cos(CAMERA.yaw) * 6, sz0 = tz + Math.sin(CAMERA.yaw) * 6;
+    sun.position.set(sx0 + SUN_OFF.x, SUN_OFF.y, sz0 + SUN_OFF.z);
+    sun.target.position.set(sx0, 0, sz0);
+    for (const t of dungeonFlames) {
+      const f = 0.85 + Math.sin(realT * 13 + t.seed) * 0.08 + Math.sin(realT * 23 + t.seed * 2) * 0.06;
+      t.f.material.opacity = 0.62 * f; t.f.scale.set(1.5 * f, 1.7 * f, 1);
+    }
+    for (let i = 0; i < torchLights.length; i++) torchLights[i].intensity = 22 * (0.88 + Math.sin(realT * 11 + i * 3) * 0.08);
+    if (P.lock && !P.lock.dead && views.get(P.lock)) {
+      const lv = views.get(P.lock);
+      lockRing.visible = true;
+      lockRing.position.set(lv.ix, 0.05, lv.iz);
+      const rr = P.lock.r * U * 1.6 + 0.25;
+      lockRing.scale.set(rr, 1, rr);
+      lockRing.rotation.y = realT;
+    } else lockRing.visible = false;
 
     // tochas
     for (const t of torches) {
@@ -2929,6 +3437,14 @@
       v.root.position.x = x; v.root.position.z = z;
       v.ix = x; v.iz = z;
       const dE = e.freeze > 0 ? 0 : adt;
+      // translúcido se estiver entre a câmera e o jogador (ou colado na câmera)
+      const cxp = camera.position.x, czp = camera.position.z;
+      const dCam = len(cxp - x, czp - z);
+      const nearCam = G.state !== 'menu' && (dCam < 1.6 + e.r * U || (dCam < camDistCur + 0.3 && segDist(x, z, cxp, czp, plx, plz) < 0.55 + e.r * U));
+      if (nearCam !== !!v.faded) {
+        v.faded = nearCam;
+        for (const m of v.mats) { m.transparent = nearCam; m.opacity = nearCam ? 0.3 : 1; m.depthWrite = !nearCam; }
+      }
       if (v.isModel) animateModelEnemy(v, e, dE);
       else { animateEnemy(v, e, dE); applyFlinch(v, e, e.face); }
       updateTelegraph(v, e, x, z);
@@ -2985,7 +3501,7 @@
 
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    if (G.state !== 'menu') { drawLabels(); drawHUD(); }
+    if (G.state !== 'menu') { drawLabels(); drawLockAndCharge(); drawThreatArrows(); drawHUD(); }
   }
 
   // ---------- Camada 2D por cima do 3D: números, barras de vida, HUD ----------
@@ -3052,6 +3568,16 @@
     const bw = Math.min(240, W * 0.42);
     bar(pad, pad, bw, 12, P.hp / P.maxHp, '#ff5a6a');
     bar(pad, pad + 16, bw * 0.8, 6, P.st / P.maxSt, P.st >= PL.dashCost ? '#f2d15c' : '#8a7a3a');
+    const full = P.rage >= 100;
+    bar(pad, pad + 26, bw * 0.8, 6, P.rage / 100, full ? (Math.floor(realT * 6) % 2 ? '#ff5a3c' : '#ffb03c') : '#c8452e');
+    if (full) {
+      ctx.font = '800 11px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = '#ffb03c';
+      ctx.fillText(isTouch() ? 'FÚRIA PRONTA' : 'FÚRIA PRONTA · R', pad + bw * 0.8 + 8, pad + 32);
+    }
+    if (showFps) {
+      ctx.font = '700 11px ui-monospace, monospace'; ctx.textAlign = 'left'; ctx.fillStyle = PERF.fps >= 50 ? '#9fe870' : PERF.fps >= 40 ? '#ffe27a' : '#ff5a6a';
+      ctx.fillText(Math.round(PERF.fps) + ' FPS · res ' + Math.round(PERF.scale * 100) + '% · nível ' + PERF.tier, pad, pad + 48);
+    }
     ctx.font = '700 11px system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillStyle = '#fff';
@@ -3102,6 +3628,9 @@
     if (isTouch()) {
       touchButtons.dash.classList.toggle('off', P.st < PL.dashCost);
       touchButtons.heavy.classList.toggle('off', P.st < PL.heavyCost);
+      touchButtons.rage.classList.toggle('ready', P.rage >= 100);
+      touchButtons.rage.classList.toggle('off', P.rage < 100);
+      touchButtons.lock.classList.toggle('on', !!P.lock);
     }
   }
 
@@ -3130,6 +3659,8 @@
     });
     resetPlayer();
     resetViews();
+    CAMERA.yaw = -Math.PI / 2; CAMERA.pitch = 0.36; camDistCur = CAMERA.dist;
+    if (!isTouch() && canvas.requestPointerLock) { try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (_) { /* opcional */ } }
     cam.x = cam.px = P.x; cam.y = cam.py = P.y;
     Input.buffer.act = null;
     menuEl.classList.remove('show'); pauseEl.classList.remove('show'); overEl.classList.remove('show');
@@ -3138,7 +3669,10 @@
   }
   function setPaused(p) {
     if (p && G.state === 'play') { G.state = 'paused'; pauseEl.classList.add('show'); }
-    else if (!p && G.state === 'paused') { G.state = 'play'; pauseEl.classList.remove('show'); last = performance.now(); }
+    else if (!p && G.state === 'paused') {
+      G.state = 'play'; pauseEl.classList.remove('show'); last = performance.now();
+      if (!isTouch() && canvas.requestPointerLock) { try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (_) { /* opcional */ } }
+    }
   }
   function togglePause() {
     if (G.state === 'play') setPaused(true);
@@ -3174,8 +3708,9 @@
     if (G.state === 'play') {
       acc += dt;
       let n = 0;
-      while (acc >= STEP && n < 12) { step(STEP); acc -= STEP; n++; }
-      if (n === 12) acc = 0;
+      // no máximo 6 passos por quadro: um quadro lento não vira uma avalanche de simulação
+      while (acc >= STEP && n < 6) { step(STEP); acc -= STEP; n++; }
+      if (n === 6) acc = Math.min(acc, STEP);
     }
     render(G.state === 'play' ? acc / STEP : 1, dt);
     requestAnimationFrame(frame);
@@ -3186,5 +3721,5 @@
   resetPlayer();
 
   // Gancho para testes automatizados (index.html?debug)
-  if (/[?&]debug\b/.test(location.search)) window.__LR = { G, P, startGame, makeEnemy, zoom: (d) => { camDist = d; } };
+  if (/[?&]debug\b/.test(location.search)) window.__LR = { G, P, startGame, makeEnemy, step, STEP, zoom: (d) => { CAMERA.dist = d; }, texAudit: () => { const tex = new Map(); scene.traverse((o) => { const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []; for (const m of ms) for (const k of ['map', 'normalMap', 'emissiveMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'alphaMap']) if (m[k]) { const key = m[k].uuid; tex.set(key, (tex.get(key) || 0) + 1); } }); const imgs = new Set(); scene.traverse((o) => { const m = o.material; if (m && m.map && m.map.source) imgs.add(m.map.source.uuid); }); return { uniqueTextures: tex.size, uniqueSources: imgs.size }; }, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, progs: renderer.info.programs.length }), frameCost: (n) => { const t0 = performance.now(); for (let i = 0; i < n; i++) { step(STEP); render(1, 1 / 60); } return (performance.now() - t0) / n; }, CAMERA, PERF: () => PERF, toggleLock };
 })();

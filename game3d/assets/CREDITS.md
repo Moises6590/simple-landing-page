@@ -13,8 +13,9 @@ Licença: Creative Commons Zero (CC0) — http://creativecommons.org/publicdomai
 Os arquivos foram otimizados para a web com glTF-Transform: só as animações e armas usadas no jogo,
 apenas rotações dos ossos (+ translação do quadril) e compressão meshopt.
 
-## Texturas — Poly Haven (https://polyhaven.com)
-- `floor_*` — Medieval Blocks 02
-- `wall_*` — Castle Brick 07
+## Cenário — KayKit Dungeon Remastered 1.0, por Kay Lousberg
+- `dungeon.glb` — lajotas, piso de terra, muralhas, cerca, colunas, tochas, barris, caixotes, baú,
+  estandartes, entulho (26 peças reunidas num arquivo, com uma textura compartilhada)
+  https://github.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0
 
-Licença: CC0. Redimensionadas para 768 px e levemente dessaturadas.
+Licença: CC0.
