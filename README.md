@@ -46,3 +46,45 @@ A browser hack & slash lives in [`game/`](game/). Open `game/index.html` in any 
 - **Local hitstop:** a hit freezes only the attacker and the victim for a few milliseconds; everyone else keeps moving.
 - **Hit-confirm cancels:** after landing a hit you can dash or parry from the middle of the swing; on a whiff the recovery locks for a short moment.
 - **Hit reactions on every hit:** enemies that don't stagger (brutes, assassins with poise left) still jolt in the hit direction.
+
+### Campaign: *As Cinzas de Ferrumbra* (3D, build 6)
+
+The 3D version is now a full game with a story, told only through subtitles (no voiced lines). The story bible is in [`docs/NARRATIVA.md`](docs/NARRATIVA.md).
+
+- **Story:** Selen Varga, the last sworn blade of the Ordem da Lâmina Rubra, against Vezmir Caldaço, o Fundidor de Almas. There is a prologue, six chapters in three acts with a twist in chapter IV, and an epilogue.
+- **Maps:** dense maps with tall cover (blocks bullets and bolts) and low cover (the Magma Bombard fires over it). They also have lava rivers, Seiva fonts, hidden embers (+max HP), an altar with relics and an exit that opens when the chapter is cleared.
+- **Enemies:**
+  - Ossário (melee, surrounds you and waits for its turn);
+  - Besteiro and Arcabuzeiro (pick firing positions with line of sight and retreat to reload behind cover);
+  - Sussurro (stays cloaked until you are busy);
+  - Rompe-Muralha (charges);
+  - Bombarda de Magma (lob shot that leaves burning pools);
+  - Vespa de Latão (flying drone that marks and dives);
+  - the two-phase boss.
+- **Ambushes:** enemies wait buried, cloaked or on the ceiling. Encounters run squad tactics:
+  - baits that lure you into a pincer;
+  - flanking pincers;
+  - a melee rush when you hide from the shooters;
+  - regrouping with the shooters when the squad is losing.
+- **Navigation:** a navigation grid with a flow field and A* moves the enemies around obstacles.
+- **Healing:** Seiva flasks (H / SEIVA button). Kills refill them, and standing at a Seiva font heals you.
+- **Relics:** 14 relics, each with a memory of a fallen oath-bearer. You choose one per chapter at the altar.
+- **Rest of the game:** Codex, chapter select, a survival mode (Provação das Cinzas), graphics options and saved progress.
+- **Graphics presets:** Baixa, Média, Alta and Ultra. Ultra adds bloom, full shadows and more lights.
+
+### Builds (Windows / Android / single HTML)
+
+The [`tools/`](tools/) folder turns `game3d/` into one self-contained `index.html`, with Three.js, models and code embedded and no network needed. It then packages that page:
+
+```bash
+cd tools && npm install
+npm run standalone     # dist/lamina-rubra.html
+npm run desktop        # Windows portable .exe with Electron (desktop/release/), Ultra by default
+npm run android        # Android APK with Capacitor (needs the Android SDK and ANDROID_HOME); landscape, immersive, Média by default
+```
+
+There is also a light Windows build of about 4 MB in `tools/desktop-lite/`. It uses Neutralino and the system WebView2:
+
+```bash
+node standalone.mjs desktop && cd desktop-lite && node build.mjs && npx @neutralinojs/neu build
+```

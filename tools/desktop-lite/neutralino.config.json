@@ -1,0 +1,38 @@
+{
+  "$schema": "https://raw.githubusercontent.com/neutralinojs/neutralinojs/main/schemas/neutralino.config.schema.json",
+  "applicationId": "com.laminarubra.game",
+  "version": "1.0.0",
+  "defaultMode": "window",
+  "documentRoot": "/app/",
+  "url": "/index.html",
+  "enableServer": true,
+  "enableNativeAPI": true,
+  "tokenSecurity": "one-time",
+  "nativeAllowList": [
+    "app.exit",
+    "window.*"
+  ],
+  "modes": {
+    "window": {
+      "title": "Lâmina Rubra — As Cinzas de Ferrumbra",
+      "width": 1600,
+      "height": 900,
+      "minWidth": 960,
+      "minHeight": 540,
+      "fullScreen": true,
+      "resizable": true,
+      "icon": "/app/icon.png",
+      "enableInspector": false,
+      "exitProcessOnClose": true
+    }
+  },
+  "cli": {
+    "binaryName": "LaminaRubra",
+    "resourcesPath": "/app/",
+    "extensionsPath": "/extensions/",
+    "clientLibrary": "/app/neutralino.js",
+    "binaryVersion": "6.1.0",
+    "clientVersion": "6.1.0"
+  },
+  "port": 53117
+}

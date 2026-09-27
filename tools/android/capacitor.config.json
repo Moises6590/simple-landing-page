@@ -1,0 +1,10 @@
+{
+  "appId": "com.laminarubra.game",
+  "appName": "Lâmina Rubra",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#0f1115",
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false
+  }
+}

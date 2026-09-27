@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f1115">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>Lâmina Rubra 3D — Hack &amp; Slash</title>
+  <title>Lâmina Rubra — As Cinzas de Ferrumbra</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -24,15 +24,82 @@
     <button class="tbtn" data-act="parry"><span>◈</span><small>APARAR</small></button>
     <button class="tbtn small" data-act="lock"><span>◎</span><small>ALVO</small></button>
     <button class="tbtn small" data-act="rage"><span>✦</span><small>FÚRIA</small></button>
+    <button class="tbtn small" data-act="heal"><span>◆</span><small>SEIVA</small></button>
   </div>
   <button id="pauseBtn" aria-label="Pausar">II</button>
 
+  <!-- Legendas, título do capítulo e objetivo -->
+  <div id="letterbox"><i></i><i></i></div>
+  <div id="caption" aria-live="polite"></div>
+  <div id="cineHint">Toque, clique ou Enter para avançar</div>
+  <div id="chapterCard"><small></small><b></b></div>
+  <div id="objective"></div>
+
   <div id="menu" class="overlay show">
+    <div class="panel main">
+      <h1>LÂMINA <span>RUBRA</span></h1>
+      <p class="tagline">As Cinzas de Ferrumbra</p>
+      <nav class="menuBtns">
+        <button class="play" data-go="continue" id="btnContinue" hidden>CONTINUAR</button>
+        <button class="play alt" data-go="new" id="btnNew">NOVA JORNADA</button>
+        <button data-go="chapters">CAPÍTULOS</button>
+        <button data-go="trial">PROVAÇÃO DAS CINZAS</button>
+        <button data-go="codex">CÓDICE</button>
+        <button data-go="options">OPÇÕES</button>
+        <button data-go="controls">CONTROLES</button>
+        <button data-go="quit" id="btnQuit" hidden>SAIR</button>
+      </nav>
+      <p class="best" id="menuNote"></p>
+    </div>
+  </div>
+
+  <div id="chapters" class="overlay">
     <div class="panel">
-      <h1>LÂMINA <span>RUBRA</span> <em>3D</em></h1>
-      <p class="sub">Hack &amp; slash de arena. Sobreviva às ondas. · <a href="../game/index.html">versão 2D</a></p>
-      <button class="play" data-start>JOGAR</button>
-      <p class="best">Recorde: <b id="bestScore">0</b></p>
+      <h2>CAPÍTULOS</h2>
+      <div id="chapterList" class="grid"></div>
+      <button class="ghost" data-go="back">VOLTAR</button>
+    </div>
+  </div>
+
+  <div id="codex" class="overlay">
+    <div class="panel">
+      <h2>CÓDICE</h2>
+      <div class="tabs">
+        <button data-go="codex" data-tab="relics">RELÍQUIAS</button>
+        <button data-go="codex" data-tab="foes">BESTIÁRIO</button>
+        <button data-go="codex" data-tab="embers">BRASAS</button>
+      </div>
+      <div id="codexBody" class="codex"></div>
+      <button class="ghost" data-go="back">VOLTAR</button>
+    </div>
+  </div>
+
+  <div id="options" class="overlay">
+    <div class="panel small">
+      <h2>OPÇÕES</h2>
+      <label class="opt">Qualidade gráfica
+        <select id="optQuality">
+          <option value="baixa">Baixa (celulares simples)</option>
+          <option value="media">Média</option>
+          <option value="alta">Alta</option>
+          <option value="ultra">Ultra (PC)</option>
+        </select>
+      </label>
+      <label class="opt">Sensibilidade da câmera
+        <input id="optSens" type="range" min="0.4" max="2.2" step="0.1">
+      </label>
+      <label class="opt check"><input id="optInvert" type="checkbox"> Inverter eixo vertical</label>
+      <label class="opt">Tamanho das legendas
+        <select id="optCap"><option value="p">Pequeno</option><option value="m">Médio</option><option value="g">Grande</option></select>
+      </label>
+      <p class="hint">O jogo reduz a resolução sozinho se o FPS cair abaixo de 50. Aperte F durante o jogo para ver o FPS.</p>
+      <button class="ghost" data-go="back">VOLTAR</button>
+    </div>
+  </div>
+
+  <div id="controls" class="overlay">
+    <div class="panel">
+      <h2>CONTROLES</h2>
       <div class="cols">
         <div>
           <h3>PC</h3>
@@ -42,7 +109,8 @@
             <li><kbd>Botão dir.</kbd>/<kbd>K</kbd> <b>segure</b> para carregar o pesado</li>
             <li><kbd>Espaço</kbd> esquiva · atacar logo depois = <b>investida</b></li>
             <li><kbd>E</kbd>/<kbd>L</kbd> aparar · <kbd>Q</kbd>/<kbd>Tab</kbd> travar alvo</li>
-            <li><kbd>R</kbd> Fúria · <kbd>Setas</kbd> câmera · <kbd>F</kbd> FPS · <kbd>Esc</kbd> pausa</li>
+            <li><kbd>H</kbd> beber Seiva · <kbd>R</kbd> Fúria</li>
+            <li><kbd>Setas</kbd> câmera · <kbd>F</kbd> FPS · <kbd>Esc</kbd> pausa</li>
           </ul>
         </div>
         <div>
@@ -51,32 +119,63 @@
             <li>Metade esquerda: joystick</li>
             <li>Metade direita: arraste para girar a câmera</li>
             <li>Segure PESADO para carregar; ALVO trava a mira</li>
-            <li>FÚRIA acende quando a barra vermelha enche</li>
+            <li>SEIVA cura; FÚRIA acende com a barra vermelha cheia</li>
           </ul>
         </div>
       </div>
       <div class="tips">
-        <b>Dicas:</b> aparar no instante do golpe atordoa o inimigo — ataque um inimigo atordoado para uma <b>execução</b> ·
-        esquivar no último momento deixa o tempo lento · a barra de Fúria enche com golpes, aparos e esquivas ·
-        o golpe <span class="orange">laranja</span> do Brutamontes não pode ser aparado · setas vermelhas na borda da tela avisam ataques vindos de fora da visão.
+        <b>Dicas:</b> aparar no instante do golpe atordoa — ataque o atordoado para uma <b>execução</b> ·
+        a linha de mira do arcabuz fica <b>amarela e sólida</b> pouco antes do tiro: saia da linha ou se esconda ·
+        o arcabuzeiro recua para recarregar: é a hora de avançar · a Bombarda atira por cima da cobertura: não fique parado ·
+        fique perto de uma <b>Fonte de Seiva</b> para curar · rebata as brasas de Vezmir contra ele.
       </div>
+      <button class="ghost" data-go="back">VOLTAR</button>
+    </div>
+  </div>
+
+  <div id="relicPick" class="overlay">
+    <div class="panel">
+      <h2>UMA LEMBRANÇA</h2>
+      <p class="sub">Escolha uma relíquia. Ela fica com você até o fim da jornada.</p>
+      <div id="relicCards" class="grid"></div>
+    </div>
+  </div>
+
+  <div id="result" class="overlay">
+    <div class="panel small">
+      <h2 id="resTitle"></h2>
+      <div id="resStats"></div>
+      <button class="play" data-go="next" id="resNext">PRÓXIMO CAPÍTULO</button>
+      <button class="ghost" data-go="menu">MENU</button>
     </div>
   </div>
 
   <div id="pause" class="overlay">
     <div class="panel small">
       <h2>PAUSADO</h2>
-      <button class="play" id="resumeBtn">CONTINUAR</button>
-      <button class="ghost" data-start>REINICIAR</button>
+      <button class="play" data-go="resume">CONTINUAR</button>
+      <button class="ghost" data-go="retry">REINICIAR CAPÍTULO</button>
+      <button class="ghost" data-go="options">OPÇÕES</button>
+      <button class="ghost" data-go="menu">MENU PRINCIPAL</button>
     </div>
   </div>
 
   <div id="over" class="overlay">
     <div class="panel small">
-      <h2>VOCÊ CAIU</h2>
+      <h2 id="overTitle">SELEN CAI</h2>
       <p id="overStats"></p>
-      <button class="play" data-start>JOGAR DE NOVO</button>
-      <a class="ghost" href="../index.html">VOLTAR AO SITE</a>
+      <button class="play" data-go="retry">LEVANTAR</button>
+      <button class="ghost" data-go="menu">MENU</button>
+    </div>
+  </div>
+
+  <div id="credits" class="overlay">
+    <div class="panel small credits">
+      <h2>LÂMINA CINZA</h2>
+      <p class="sub">Fim de <i>As Cinzas de Ferrumbra</i>.</p>
+      <p>Obrigado por jogar.</p>
+      <p class="small">Personagens e cenário: KayKit, de Kay Lousberg (CC0) · Motor 3D: Three.js (MIT)</p>
+      <button class="play" data-go="menu">MENU</button>
     </div>
   </div>
 
@@ -89,13 +188,17 @@
     }
   </script>
   <script type="module">
-    // Carrega o Three.js + carregador de modelos e só então o jogo (script clássico, funciona até via file://)
+    // Carrega o Three.js e extras; depois o jogo (script clássico, funciona até via file://)
     import * as THREE from 'three';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
     import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
     import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
     window.THREE = THREE;
-    window.THREE_EXTRAS = { GLTFLoader, MeshoptDecoder, SkeletonUtils };
+    window.THREE_EXTRAS = { GLTFLoader, MeshoptDecoder, SkeletonUtils, EffectComposer, RenderPass, UnrealBloomPass, OutputPass };
     const s = document.createElement('script');
     s.src = 'game.js';
     document.body.appendChild(s);

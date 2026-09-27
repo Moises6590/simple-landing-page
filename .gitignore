@@ -1,0 +1,13 @@
+node_modules/
+tools/dist/
+tools/desktop/app/
+tools/desktop/release/
+tools/android/www/
+tools/android/android/
+tools/node_modules
+tools/desktop/node_modules/
+tools/android/node_modules/
+tools/desktop-lite/bin/
+tools/desktop-lite/dist/
+tools/desktop-lite/app/
+tools/desktop-lite/.tmp/

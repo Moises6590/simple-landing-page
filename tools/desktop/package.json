@@ -1,0 +1,36 @@
+{
+  "name": "lamina-rubra",
+  "productName": "Lamina Rubra",
+  "version": "1.0.0",
+  "description": "Lâmina Rubra — As Cinzas de Ferrumbra",
+  "main": "main.js",
+  "author": "Lâmina Rubra",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable --x64"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.laminarubra.game",
+    "productName": "Lamina Rubra",
+    "files": [
+      "main.js",
+      "app/**"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "portable",
+      "signAndEditExecutable": false,
+      "icon": "icon.png"
+    },
+    "portable": {
+      "artifactName": "LaminaRubra-${version}-Windows.exe"
+    }
+  }
+}
