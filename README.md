@@ -35,3 +35,11 @@ A browser hack & slash lives in [`game/`](game/). Open `game/index.html` in any 
 - Articulated characters (shoulder, elbow, hand, hip, knee) animated procedurally from the simulation state: walk cycle from real velocity, sword arcs that follow the hit arc, wind-ups, stagger, stun, death falls.
 - Distinct gear per class: knight with runic sword, buckler, crested helm and cape; soldier with kettle helm and round shield; hooded archer with bow, nocked arrow and quiver; horned brute with spiked war hammer; masked assassin with twin daggers and glowing eyes; crowned champion.
 - Torch-lit arena with walls, columns, rune circle and shadows; ground telegraphs, slash trails, particles and the same HUD.
+- Rigged, animated characters from the CC0 [KayKit](https://kaylousberg.com) Adventurers and Skeletons packs (knight, skeleton warrior, skeleton crossbowman, barbarian, hooded rogue) and CC0 stone textures from [Poly Haven](https://polyhaven.com). Attack clips are scrubbed by the simulation so the weapon crosses exactly on the hit frame. See [`game3d/assets/CREDITS.md`](game3d/assets/CREDITS.md).
+- The models and textures are fetched over HTTP, so serve the folder instead of double-clicking the file (e.g. `npx serve .` and open `/game3d/`). Opened via `file://`, the game still runs with the built-in procedural characters.
+
+### Combat feel (both versions)
+
+- **Local hitstop:** a hit freezes only the attacker and the victim for a few milliseconds; everyone else keeps moving.
+- **Hit-confirm cancels:** after landing a hit you can dash or parry from the middle of the swing; on a whiff the recovery locks for a short moment.
+- **Hit reactions on every hit:** enemies that don't stagger (brutes, assassins with poise left) still jolt in the hit direction.

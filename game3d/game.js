@@ -1,6 +1,7 @@
 /*
  * Lâmina Rubra 3D — hack & slash de arena para navegador.
  * Mesma simulação e IA da versão 2D (../game); a apresentação é 3D com Three.js.
+ * Personagens: KayKit Adventurers + Skeletons (Kay Lousberg, CC0). Texturas: Poly Haven (CC0).
  *
  * Organização:
  *   utilidades · som · entrada (teclado/mouse/toque) · mundo · jogador ·
@@ -331,7 +332,7 @@
     state: 'menu', // menu | play | paused | over
     time: 0, wave: 0, score: 0, kills: 0, parries: 0, bestCombo: 0,
     combo: 0, comboT: 0,
-    freeze: 0, slowT: 0, slowScale: 1,
+    slowT: 0, slowScale: 1,
     trauma: 0, hurtFlash: 0,
     enemies: [], projectiles: [], particles: [], texts: [], orbs: [], slashes: [], ghosts: [], rings: [],
     spawnQueue: [], spawnT: 0, waveDelay: 0, maxAlive: 5, maxMelee: 2, maxRanged: 1,
@@ -341,7 +342,14 @@
   const cam = { x: 0, y: 0, px: 0, py: 0 };
   let threatId = 0;
 
-  function hitstop(t) { G.freeze = Math.max(G.freeze, t); }
+  // Hitstop local: congela só quem bateu e quem apanhou; o resto da luta continua.
+  function hitstop(t, ...ents) {
+    for (const o of ents) if (o) o.freeze = Math.max(o.freeze || 0, t);
+  }
+  function tickFreeze(o, dt) {
+    if (o.freeze > 0) { o.freeze -= dt; return true; }
+    return false;
+  }
   function slowmo(t, scale) {
     G.slowScale = G.slowT > 0 ? Math.min(G.slowScale, scale) : scale;
     G.slowT = Math.max(G.slowT, t);
@@ -378,6 +386,7 @@
       x: 0, y: 80, px: 0, py: 80, vx: 0, vy: 0, face: -Math.PI / 2,
       hp: P.maxHp, st: P.maxSt, stDelay: 0, state: 'idle', t: 0, atk: null,
       comboIdx: -1, comboWindow: 0, iframe: 0, dashCd: 0, parryT: 0, threat: null,
+      freeze: 0, confirm: false, flinchT: 0, flinchA: 0, flinchK: 1, actionId: 0,
     });
     P.hitSet.clear();
   }
@@ -411,10 +420,16 @@
     return { ang: Math.atan2(best.y - P.y, best.x - P.x), target: best, dist: len(best.x - P.x, best.y - P.y) };
   }
 
+  // Janelas de cancelamento. Acertou (P.confirm): pode sair do golpe já na metade dele.
+  // Errou: a recuperação trava por WHIFF_LOCK antes de esquivar/aparar.
+  const WHIFF_LOCK = 0.08;
+  function inStrike(a) { return P.t >= a.wind && P.t < a.wind + a.active; }
+  function strikeCancel(a) { return P.confirm && P.t >= a.wind + a.active * 0.5; }
+  function afterStrike(a, lock) { return P.t >= a.wind + a.active + (P.confirm ? 0 : lock); }
   function canAttackNow() {
     switch (P.state) {
       case 'idle': return true;
-      case 'attack': return P.t >= P.atk.wind + P.atk.active; // cancela a recuperação
+      case 'attack': return P.t >= P.atk.wind + P.atk.active * (P.confirm ? 0.7 : 1); // cancela a recuperação
       case 'heavy': return P.t >= HEAVY.wind + HEAVY.active + HEAVY.rec * 0.45;
       case 'dash': return P.t >= PL.dashTime * 0.55; // ataque em investida
       case 'parry': return P.t >= PL.parryWindow;
@@ -425,8 +440,8 @@
     if (P.dashCd > 0 || P.st < PL.dashCost) return false;
     switch (P.state) {
       case 'idle': case 'parry': return true;
-      case 'attack': return P.t < P.atk.wind || P.t >= P.atk.wind + P.atk.active;
-      case 'heavy': return P.t < HEAVY.wind || P.t >= HEAVY.wind + HEAVY.active;
+      case 'attack': return P.t < P.atk.wind || (inStrike(P.atk) ? strikeCancel(P.atk) : afterStrike(P.atk, WHIFF_LOCK));
+      case 'heavy': return P.t < HEAVY.wind || (inStrike(HEAVY) ? strikeCancel(HEAVY) : afterStrike(HEAVY, WHIFF_LOCK * 1.5));
       case 'hurt': return P.t >= 0.12;
       default: return false;
     }
@@ -434,8 +449,8 @@
   function canParryNow() {
     switch (P.state) {
       case 'idle': return true;
-      case 'attack': return P.t >= P.atk.wind + P.atk.active;
-      case 'heavy': return P.t >= HEAVY.wind + HEAVY.active;
+      case 'attack': return P.t < P.atk.wind || (inStrike(P.atk) ? strikeCancel(P.atk) : afterStrike(P.atk, WHIFF_LOCK));
+      case 'heavy': return P.t < HEAVY.wind || (inStrike(HEAVY) ? strikeCancel(HEAVY) : afterStrike(HEAVY, WHIFF_LOCK * 1.5));
       case 'dash': return P.t >= PL.dashTime * 0.6;
       default: return false;
     }
@@ -465,7 +480,7 @@
   function startAttack(idx, mv) {
     const a = COMBO[idx];
     const aim = aimAssist(mv, a.range);
-    P.state = 'attack'; P.t = 0; P.atk = a; P.comboIdx = idx;
+    P.state = 'attack'; P.t = 0; P.atk = a; P.comboIdx = idx; P.confirm = false; P.actionId++;
     P.lunged = false; P.hitSet.clear();
     P.swingSide = idx === 1 ? -1 : 1;
     P.face = aim.ang;
@@ -475,7 +490,7 @@
   }
   function startHeavy(mv) {
     const aim = aimAssist(mv, HEAVY.range);
-    P.state = 'heavy'; P.t = 0; P.lunged = false; P.hitSet.clear();
+    P.state = 'heavy'; P.t = 0; P.lunged = false; P.hitSet.clear(); P.confirm = false; P.actionId++;
     P.face = aim.ang;
     P.st -= PL.heavyCost; P.stDelay = 0.7;
     P.comboWindow = 0; P.comboIdx = -1;
@@ -486,7 +501,7 @@
     if (mv.m < 0.2) { dx = Math.cos(P.face); dy = Math.sin(P.face); }
     const m = len(dx, dy) || 1;
     P.dashX = dx / m; P.dashY = dy / m;
-    P.state = 'dash'; P.t = 0;
+    P.state = 'dash'; P.t = 0; P.actionId++;
     P.iframe = Math.max(P.iframe, PL.dashTime + 0.05);
     P.st -= PL.dashCost; P.stDelay = 0.55;
     P.dashCd = PL.dashTime + PL.dashCd;
@@ -507,13 +522,14 @@
       if (d < bd) { bd = d; best = pr; }
     }
     P.face = best ? Math.atan2(best.y - P.y, best.x - P.x) : baseAim(mv);
-    P.state = 'parry'; P.t = 0;
+    P.state = 'parry'; P.t = 0; P.actionId++;
     P.parryT = PL.parryWindow;
     P.threat = null;
   }
 
   function playerStep(dt) {
     const mv = readMove();
+    P.flinchT -= dt;
     P.iframe -= dt; P.dashCd -= dt; P.parryT -= dt; P.comboWindow -= dt; P.stDelay -= dt;
     if (P.stDelay <= 0) P.st = Math.min(P.maxSt, P.st + 40 * dt);
 
@@ -618,7 +634,7 @@
       const ang = Math.atan2(dy, dx);
       if (Math.abs(angDiff(P.face, ang)) > a.arc / 2 && d > e.r + P.r + 6) continue;
       P.hitSet.add(e);
-      damageEnemy(e, a.dmg, ang, a.kb, a.poise, { stop: a.stop, finisher: a.finisher });
+      if (damageEnemy(e, a.dmg, ang, a.kb, a.poise, { stop: a.stop, finisher: a.finisher })) P.confirm = true;
     }
     // Golpes cortam/rebatem flechas.
     for (const pr of G.projectiles) {
@@ -635,7 +651,7 @@
       const dx = e.x - P.x, dy = e.y - P.y, d = len(dx, dy);
       if (d > HEAVY.range + e.r) continue;
       P.hitSet.add(e);
-      damageEnemy(e, HEAVY.dmg, Math.atan2(dy, dx), HEAVY.kb, HEAVY.poise, { stop: HEAVY.stop, heavy: true });
+      if (damageEnemy(e, HEAVY.dmg, Math.atan2(dy, dx), HEAVY.kb, HEAVY.poise, { stop: HEAVY.stop, heavy: true })) P.confirm = true;
     }
     for (const pr of G.projectiles) {
       if (pr.friendly || pr.dead) continue;
@@ -659,11 +675,12 @@
     }
     P.hp -= dmg;
     P.iframe = 0.55;
+    P.flinchT = FLINCH_TIME; P.flinchA = ang; P.flinchK = 1.3;
     P.state = 'hurt'; P.t = 0; P.threat = null; P.atk = null;
     P.vx = Math.cos(ang) * kb; P.vy = Math.sin(ang) * kb;
     G.combo = 0; G.comboT = 0;
     G.hurtFlash = 0.35;
-    hitstop(0.07); shake(0.45);
+    hitstop(0.07, P, src.type ? src : null); shake(0.45);
     Sound.play('hurt'); vibrate(45);
     burst(P.x, P.y, ang, 12, '#ff5a6a', 260);
     addText(P.x, P.y - 26, '-' + Math.round(dmg), '#ff5a6a', 18);
@@ -681,11 +698,11 @@
     e.token = false;
     const a = Math.atan2(e.y - P.y, e.x - P.x);
     e.vx = Math.cos(a) * 320 / e.mass; e.vy = Math.sin(a) * 320 / e.mass;
-    parryFx((P.x + e.x) / 2, (P.y + e.y) / 2);
+    parryFx((P.x + e.x) / 2, (P.y + e.y) / 2, e);
     addText(e.x, e.y - e.r - 18, 'APARADO!', '#ffe27a', 18);
   }
-  function parryFx(x, y) {
-    hitstop(0.13); slowmo(0.5, 0.3); shake(0.35);
+  function parryFx(x, y, e) {
+    hitstop(0.13, P, e); slowmo(0.5, 0.3); shake(0.35);
     P.st = Math.min(P.maxSt, P.st + 35);
     P.parryT = 0; P.state = 'idle';
     G.parries++;
@@ -718,6 +735,7 @@
       seenThreat: -1, hitDone: false, strafeDir: Math.random() < 0.5 ? 1 : -1, strafeT: rand(1, 2),
       side: Math.random() < 0.5 ? 1 : -1, aimAng: 0, strikes: 0, chargeHit: null,
       tempo: 1, elite: !!elite, dead: false,
+      freeze: 0, flinchT: 0, flinchA: 0, flinchK: 1,
     };
     e.face = Math.atan2(P.y - y, P.x - x);
     if (elite) {
@@ -729,6 +747,9 @@
     return e;
   }
   function setState(e, s, t) { e.state = s; e.st = t; e.stTotal = t; }
+  const FLINCH_TIME = 0.16;
+  // 0 → 1 → 0 ao longo do tranco
+  function flinchAmount(o) { return o.flinchT > 0 ? Math.sin((1 - o.flinchT / FLINCH_TIME) * Math.PI) * o.flinchK : 0; }
   function want(e, vx, vy, acc) { e.dvx = vx; e.dvy = vy; e.acc = acc; }
   function seekTo(e, tx, ty, speed, arrive) {
     const dx = tx - e.x, dy = ty - e.y, d = len(dx, dy);
@@ -912,7 +933,7 @@
             if (o === e || o.dead || o.state === 'spawn' || e.chargeHit.has(o)) continue;
             if (len(o.x - e.x, o.y - e.y) < e.r + o.r + 4) {
               e.chargeHit.add(o);
-              damageEnemy(o, 18, e.face, 520, 60, { fromEnemy: true, stop: 0.03 });
+              damageEnemy(o, 18, e.face, 520, 60, { fromEnemy: true, src: e, stop: 0.03 });
             }
           }
           if (e.st <= 0) setState(e, 'recover', 0.6);
@@ -993,6 +1014,7 @@
   }
 
   function updateEnemy(e, dt) {
+    e.flinchT -= dt;
     e.st -= dt; e.atkCd -= dt; e.dodgeCd -= dt; e.iframe -= dt; e.hitFlash -= dt; e.poiseDelay -= dt;
     if (e.poiseDelay <= 0) e.poise = Math.min(e.maxPoise, e.poise + e.maxPoise * 0.6 * dt);
     if (e.token) e.tokenT += dt; else if (e.state === 'move') e.waitT += dt;
@@ -1146,6 +1168,8 @@
     dmg = Math.round(dmg);
     e.hp -= dmg;
     e.hitFlash = 0.1;
+    // tranco visual na direção do golpe; mais forte em finalizador/pesado
+    e.flinchT = FLINCH_TIME; e.flinchA = ang; e.flinchK = o.heavy || o.finisher ? 1.6 : 1;
     const km = kb / e.mass;
     e.vx += Math.cos(ang) * km; e.vy += Math.sin(ang) * km;
     if (e.state !== 'stun') {
@@ -1156,7 +1180,7 @@
         e.token = false;
       }
     }
-    hitstop(o.stop || 0.04);
+    hitstop(o.stop || 0.04, e, o.src === undefined ? P : o.src);
     if (o.finisher || o.heavy) shake(0.22); else shake(0.08);
     burst(e.x, e.y, ang, crit ? 14 : 8, crit ? '#ffe27a' : e.color, crit ? 380 : 300);
     addText(e.x + rand(-8, 8), e.y - e.r - 10, crit ? dmg + '!' : String(dmg), crit ? '#ffe27a' : '#ffffff', crit ? 19 : 14);
@@ -1219,7 +1243,7 @@
         for (const e of G.enemies) {
           if (e.dead || e.state === 'spawn') continue;
           if (len(pr.x - e.x, pr.y - e.y) < pr.r + e.r) {
-            damageEnemy(e, pr.dmg, ang, 300, 30, { stop: 0.05 });
+            damageEnemy(e, pr.dmg, ang, 300, 30, { src: null, stop: 0.05 });
             pr.dead = true; break;
           }
         }
@@ -1335,7 +1359,7 @@
     G.particles = G.particles.filter((p) => p.life > 0);
     for (const t of G.texts) { t.life -= dt; t.h += 45 * dt; }
     G.texts = G.texts.filter((t) => t.life > 0);
-    for (const s of G.slashes) s.t += dt;
+    if (!(P.freeze > 0)) for (const s of G.slashes) s.t += dt; // o rastro congela junto com o golpe
     G.slashes = G.slashes.filter((s) => s.t < s.dur + 0.12);
     for (const g of G.ghosts) g.life -= dt;
     G.ghosts = G.ghosts.filter((g) => g.life > 0);
@@ -1358,7 +1382,6 @@
     G.trauma = Math.max(0, G.trauma - 1.8 * dt);
     G.hurtFlash = Math.max(0, G.hurtFlash - dt);
     if (G.banner.t > 0) G.banner.t -= dt;
-    if (G.freeze > 0) { G.freeze -= dt; return; } // hitstop: congela o mundo por alguns ms
 
     let scale = 1;
     if (G.slowT > 0) {
@@ -1371,9 +1394,10 @@
 
     if (G.comboT > 0) { G.comboT -= sdt; if (G.comboT <= 0) G.combo = 0; }
 
-    playerStep(sdt);
+    // Congelamento do hitstop conta em tempo real (não desacelera com o slow motion).
+    if (!tickFreeze(P, dt)) playerStep(sdt);
     director(sdt);
-    for (const e of G.enemies) if (!e.dead) updateEnemy(e, sdt);
+    for (const e of G.enemies) if (!e.dead && !tickFreeze(e, dt)) updateEnemy(e, sdt);
     resolveBodies();
     updateProjectiles(sdt);
     updateOrbs(sdt);
@@ -1960,7 +1984,9 @@
 
   function disposeView(v) {
     scene.remove(v.root);
+    if (v.mixer) { v.mixer.stopAllAction(); v.mixer.uncacheRoot(v.model); }
     for (const m of v.mats) m.dispose();
+    // geometrias são compartilhadas (cache / modelo original); só materiais próprios são liberados
     v.root.traverse((o) => { if (o.material && !v.mats.includes(o.material) && o.material.dispose) o.material.dispose(); });
     if (v.tele) for (const k in v.tele) { teleGroup.remove(v.tele[k]); v.tele[k].material.dispose(); }
   }
@@ -2240,16 +2266,331 @@
     return P.face + 1.0;
   }
 
+  // =========================================================================
+  // Modelos animados (KayKit Adventurers + Skeletons, de Kay Lousberg — CC0)
+  //   Ficam em assets/. Se não carregarem (sem internet, ou aberto via file://),
+  //   o jogo usa os bonecos procedurais acima.
+  // =========================================================================
+  const EX = window.THREE_EXTRAS || {};
+  const ASSET_BASE = 'assets/';
+  const MODEL_DEFS = {
+    player: { file: 'knight.glb', h: 1.85, idle: 'Idle' },
+    grunt: { file: 'skeleton_warrior.glb', h: 1.8, idle: 'Idle_Combat', right: 'skeleton_blade.glb', left: 'skeleton_shield.glb', undead: true },
+    archer: { file: 'skeleton_rogue.glb', h: 1.78, idle: 'Idle_Combat', right: 'skeleton_crossbow.glb', undead: true },
+    brute: { file: 'barbarian.glb', h: 1.8, idle: '2H_Melee_Idle' },
+    rogue: { file: 'rogue.glb', h: 1.75, idle: 'Idle' },
+  };
+  // Pontos de controle de cada ataque, em fração do clipe:
+  // [início, começo do golpe, fim do golpe, fim usado]. O tempo da simulação é mapeado neles.
+  // (medidos pelo pico de velocidade da mão em cada clipe)
+  const MARKS = {
+    '1H_Melee_Attack_Slice_Diagonal': [0.12, 0.35, 0.45, 0.8],
+    '1H_Melee_Attack_Slice_Horizontal': [0.03, 0.18, 0.27, 0.7],
+    '1H_Melee_Attack_Chop': [0.2, 0.49, 0.57, 0.9],
+    '2H_Melee_Attack_Spin': [0.05, 0.24, 0.56, 0.85],
+    '2H_Melee_Attack_Chop': [0.1, 0.48, 0.54, 0.9],
+    '2H_Melee_Attack_Stab': [0, 0.2, 0.27, 0.85],
+    Dualwield_Melee_Attack_Stab: [0.05, 0.2, 0.27, 0.6],
+    Dualwield_Melee_Attack_Slice: [0.15, 0.43, 0.55, 0.9],
+  };
+  const COMBO_CLIPS = ['1H_Melee_Attack_Slice_Diagonal', '1H_Melee_Attack_Slice_Horizontal', '1H_Melee_Attack_Chop'];
+  const MODELS = { ready: false, settled: false, gltf: {} };
+  const canLoadAssets = location.protocol !== 'file:' && !!EX.GLTFLoader && !!EX.SkeletonUtils;
+  const modelsPromise = (() => {
+    if (!canLoadAssets) { MODELS.settled = true; return Promise.resolve(false); }
+    const loader = new EX.GLTFLoader();
+    if (EX.MeshoptDecoder) loader.setMeshoptDecoder(EX.MeshoptDecoder);
+    const files = [...new Set(Object.values(MODEL_DEFS).flatMap((d) => [d.file, d.right, d.left]).filter(Boolean))];
+    return Promise.all(files.map((f) => loader.loadAsync(ASSET_BASE + f).then((g) => { MODELS.gltf[f] = g; })))
+      .then(() => { MODELS.ready = true; return true; })
+      .catch((err) => { console.warn('Modelos 3D indisponíveis; usando personagens procedurais.', err); return false; })
+      .finally(() => { MODELS.settled = true; });
+  })();
+
+  // Texturas de pedra (Poly Haven, CC0) por cima das procedurais
+  if (canLoadAssets) {
+    const tl = new THREE.TextureLoader();
+    const load = (f, srgb, cb) => tl.load(ASSET_BASE + f, (t) => {
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+      if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+      cb(t);
+    }, undefined, () => {});
+    const FR = [AW / 2.6, AH / 2.6];
+    load('floor_color.jpg', true, (t) => { t.repeat.set(...FR); floor.material.map = t; floor.material.color.set('#8c8a8f'); floor.material.needsUpdate = true; });
+    load('floor_normal.jpg', false, (t) => { t.repeat.set(...FR); floor.material.normalMap = t; floor.material.normalScale.set(0.9, 0.9); floor.material.needsUpdate = true; });
+    load('wall_color.jpg', true, (t) => { for (const m of [wallMat, stoneMat]) { m.map = t; m.color.set('#cfcac6'); m.needsUpdate = true; } });
+    load('wall_normal.jpg', false, (t) => { for (const m of [wallMat, stoneMat]) { m.normalMap = t; m.needsUpdate = true; } });
+  }
+
+  function buildModelView(kind, elite) {
+    const def = MODEL_DEFS[kind], g = MODELS.gltf[def.file];
+    const model = EX.SkeletonUtils.clone(g.scene);
+    // o GLTFLoader remove o ponto dos nomes: "handslot.r" → "handslotr"
+    const attach = (bone, file) => {
+      const b = model.getObjectByName(bone);
+      if (b && file) b.add(MODELS.gltf[file].scene.clone(true));
+    };
+    attach('handslotr', def.right);
+    attach('handslotl', def.left);
+    const mats = [];
+    model.traverse((o) => {
+      if (!o.isMesh) return;
+      o.castShadow = true;
+      o.frustumCulled = false; // a caixa do bind pose não acompanha a animação
+      const m = o.material.clone();
+      if (elite) { m.color.set('#ffd98a'); m.emissive.set('#3a2600'); m.emissiveIntensity = 1; }
+      m.userData.e0 = m.emissive.clone(); m.userData.ei0 = m.emissiveIntensity;
+      o.material = m;
+      mats.push(m);
+    });
+    if (def.base === undefined) {
+      const box = new THREE.Box3().setFromObject(g.scene);
+      def.base = def.h / Math.max(0.01, box.max.y - box.min.y);
+      def.minY = box.min.y;
+    }
+    model.scale.setScalar(def.base);
+    model.position.y = -def.minY * def.base;
+    const root = new THREE.Group(); root.rotation.order = 'YXZ';
+    const tilt = new THREE.Group(); root.add(tilt); tilt.add(model);
+    const scale = LOOKS[kind].scale * (elite ? 1.18 : 1);
+    root.scale.setScalar(scale);
+    const v = {
+      kind, isModel: true, def, root, tilt, model, mats, scale, height: def.h * scale,
+      mixer: new THREE.AnimationMixer(model), clips: {}, actions: {}, cur: null,
+      alt: false, key: null, state: '', prevState: '', flashing: false,
+    };
+    for (const c of g.animations) v.clips[c.name] = c;
+    if (elite) {
+      const aura = new THREE.Mesh(geo('auraRing', () => new THREE.RingGeometry(0.62, 0.72, 40).rotateX(-Math.PI / 2)),
+        new THREE.MeshBasicMaterial({ color: '#ffcf4a', transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
+      aura.position.y = 0.03;
+      root.add(aura);
+      v.aura = aura;
+    }
+    return v;
+  }
+  function buildView(kind, elite) {
+    return MODELS.ready ? buildModelView(kind, elite) : buildHumanoid(kind, elite);
+  }
+
+  // ---------- Controle das animações ----------
+  function getAction(v, name, alt) {
+    const key = alt ? name + '#b' : name;
+    if (v.actions[key]) return v.actions[key];
+    let clip = v.clips[name];
+    if (!clip) return null;
+    if (alt) { // segunda cópia do clipe: permite repetir o mesmo golpe com transição suave
+      v.def.alt = v.def.alt || {};
+      clip = v.def.alt[name] || (v.def.alt[name] = clip.clone());
+    }
+    return (v.actions[key] = v.mixer.clipAction(clip));
+  }
+  function switchTo(v, a, fade, loop) {
+    if (v.cur === a) return;
+    a.reset();
+    a.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+    a.clampWhenFinished = !loop;
+    a.play();
+    if (v.cur) a.crossFadeFrom(v.cur, fade, false);
+    v.cur = a;
+  }
+  function loopAnim(v, name, speed, fade) {
+    const a = getAction(v, name);
+    if (!a) return false;
+    switchTo(v, a, fade === undefined ? 0.18 : fade, true);
+    a.timeScale = speed;
+    return true;
+  }
+  function onceAnim(v, name, speed, fade) {
+    const a = getAction(v, name);
+    if (!a) return false;
+    switchTo(v, a, fade, false);
+    a.timeScale = speed;
+    return true;
+  }
+  // O tempo do clipe é dirigido pela simulação: times (s) → fracs (fração do clipe).
+  function scrub(v, name, t, times, fracs, fade, alt) {
+    const a = getAction(v, name, alt);
+    if (!a) return false;
+    switchTo(v, a, fade, false);
+    let f = fracs[fracs.length - 1];
+    for (let i = 0; i < times.length - 1; i++) {
+      if (t <= times[i + 1]) {
+        f = lerp(fracs[i], fracs[i + 1], clamp((t - times[i]) / Math.max(1e-6, times[i + 1] - times[i]), 0, 1));
+        break;
+      }
+    }
+    a.enabled = true; a.paused = false; a.timeScale = 0;
+    a.time = Math.min(f, 0.995) * a.getClip().duration;
+    return true;
+  }
+  function dodgeClip(face, vx, vy) {
+    const rel = angDiff(face, Math.atan2(vy, vx));
+    if (Math.abs(rel) < 0.8) return 'Dodge_Forward';
+    if (Math.abs(rel) > 2.35) return 'Dodge_Backward';
+    return rel > 0 ? 'Dodge_Right' : 'Dodge_Left';
+  }
+  // Andar/correr/lateral/ré conforme a direção do movimento em relação ao rosto.
+  function locomotion(v, vx, vy, face, idle) {
+    const sp = len(vx, vy), k = v.scale;
+    if (sp < 22) { loopAnim(v, idle, 1, 0.2); return; }
+    const rel = angDiff(face, Math.atan2(vy, vx));
+    if (Math.abs(rel) < 0.8) {
+      if (sp > 150 * k) loopAnim(v, 'Running_A', clamp(sp / (230 * k), 0.7, 1.7), 0.18);
+      else loopAnim(v, 'Walking_A', clamp(sp / (100 * k), 0.6, 1.6), 0.18);
+    } else if (Math.abs(rel) > 2.3) loopAnim(v, 'Walking_Backwards', clamp(sp / (95 * k), 0.6, 1.7), 0.18);
+    else loopAnim(v, rel > 0 ? 'Running_Strafe_Right' : 'Running_Strafe_Left', clamp(sp / (200 * k), 0.6, 1.6), 0.18);
+  }
+  function tint(v, mode) {
+    if (v.tintMode === mode) return;
+    v.tintMode = mode;
+    for (const m of v.mats) {
+      if (mode === 'flash') { m.emissive.set('#ffffff'); m.emissiveIntensity = 0.42; }
+      else if (mode === 'parry') { m.emissive.set('#ffc83a'); m.emissiveIntensity = 0.55; }
+      else { m.emissive.copy(m.userData.e0); m.emissiveIntensity = m.userData.ei0; }
+    }
+  }
+  // Tranco do golpe + balanço do atordoado, somados por cima da animação
+  function applyFlinch(v, ent, face) {
+    const fk = flinchAmount(ent);
+    let rx = 0, rz = 0, px = 0, pz = 0;
+    if (fk) {
+      const t = Math.PI / 2 + angDiff(face, ent.flinchA); // direção do empurrão no espaço do modelo
+      const dx = Math.cos(t), dz = Math.sin(t);
+      rx = dz * 0.3 * fk; rz = -dx * 0.3 * fk;
+      px = dx * 0.13 * fk; pz = dz * 0.13 * fk;
+    }
+    if (ent.state === 'stun') rz += Math.sin(G.time * 5) * 0.1;
+    if (v.isModel) {
+      v.tilt.rotation.set(rx, 0, rz);
+      v.tilt.position.set(px, 0, pz);
+    } else {
+      v.body.rotation.x += rx;
+      v.body.rotation.z = rz;
+    }
+  }
+
+  function animateModelPlayer(v, dt) {
+    const key = P.state + ':' + P.actionId;
+    if (key !== v.key) {
+      v.key = key; v.alt = !v.alt;
+      if (P.state === 'dash') v.dashClip = dodgeClip(P.face, P.dashX, P.dashY);
+    }
+    switch (P.state) {
+      case 'attack': {
+        const a = P.atk, name = COMBO_CLIPS[P.comboIdx] || COMBO_CLIPS[0];
+        scrub(v, name, P.t, [0, a.wind, a.wind + a.active, a.wind + a.active + a.rec], MARKS[name], 0.06, v.alt);
+        break;
+      }
+      case 'heavy':
+        scrub(v, '2H_Melee_Attack_Spin', P.t, [0, HEAVY.wind, HEAVY.wind + HEAVY.active, HEAVY.wind + HEAVY.active + HEAVY.rec], MARKS['2H_Melee_Attack_Spin'], 0.06, v.alt);
+        break;
+      case 'dash': scrub(v, v.dashClip, P.t, [0, PL.dashTime], [0.02, 0.85], 0.05, v.alt); break;
+      case 'parry': scrub(v, 'Block', P.t, [0, 0.08, PL.parryTime], [0.02, 0.25, 0.4], 0.04, v.alt); break;
+      case 'hurt': scrub(v, 'Hit_A', P.t, [0, 0.26], [0, 0.6], 0.04, v.alt); break;
+      case 'dead': onceAnim(v, 'Death_A', 1, 0.1); break;
+      default: locomotion(v, P.vx, P.vy, P.face, v.def.idle);
+    }
+    v.mixer.update(dt);
+    v.root.rotation.y = Math.PI / 2 - P.face;
+    applyFlinch(v, P, P.face);
+    tint(v, P.parryT > 0 ? 'parry' : (P.iframe > 0 && P.state === 'hurt' && Math.floor(G.time * 20) % 2 === 0 ? 'flash' : 'none'));
+  }
+
+  const MODEL_ANIM = {
+    grunt(v, e, p) {
+      const W = 0.42 * e.tempo, A = 0.14, R = 0.55;
+      const t = e.state === 'windup' ? p * W : e.state === 'active' ? W + p * A : W + A + p * R;
+      scrub(v, '1H_Melee_Attack_Chop', t, [0, W, W + A, W + A + R], MARKS['1H_Melee_Attack_Chop'], 0.1, v.alt);
+    },
+    archer(v, e, p) {
+      if (e.state === 'aim') loopAnim(v, '2H_Ranged_Aiming', 1, 0.15);
+      else scrub(v, '2H_Ranged_Shoot', p, [0, 1], [0.02, 0.6], 0.04, v.alt);
+    },
+    brute(v, e, p) {
+      const M = MARKS['2H_Melee_Attack_Chop'];
+      switch (e.state) {
+        case 'slamWind': scrub(v, '2H_Melee_Attack_Chop', p, [0, 1], [M[0], M[1]], 0.12, v.alt); break;
+        case 'chargeWind': scrub(v, '2H_Melee_Attack_Stab', p, [0, 1], [0, 0.2], 0.12, v.alt); break;
+        case 'charge': loopAnim(v, 'Running_B', 1.5, 0.08); break;
+        case 'recover':
+          if (v.prevState === 'slamWind') scrub(v, '2H_Melee_Attack_Chop', p, [0, 0.12, 1], [M[1], M[2], M[3]], 0.04, v.alt);
+          else scrub(v, '2H_Melee_Attack_Stab', p, [0, 1], [0.26, 0.85], 0.1, v.alt);
+          break;
+      }
+    },
+    rogue(v, e, p) {
+      const name = e.strikes === 2 ? 'Dualwield_Melee_Attack_Stab' : 'Dualwield_Melee_Attack_Slice';
+      const M = MARKS[name];
+      if (e.state === 'windup') scrub(v, name, p, [0, 1], [M[0], M[1]], 0.06, v.alt);
+      else if (e.state === 'active') scrub(v, name, p, [0, 1], [M[1], M[2]], 0.02, v.alt);
+      else scrub(v, name, p, [0, 1], [M[2], M[3]], 0.05, v.alt);
+    },
+  };
+  // Estados que começam um movimento novo: usam a outra cópia do clipe (transição suave ao repetir).
+  // 'active'/'recover' continuam o mesmo golpe e mantêm a cópia.
+  const ALT_ON_ENTER = new Set(['windup', 'slamWind', 'chargeWind', 'aim', 'stagger', 'dodge', 'stun']);
+  function animateModelEnemy(v, e, dt) {
+    if (e.state !== v.state) {
+      v.prevState = v.state; v.state = e.state;
+      if (ALT_ON_ENTER.has(e.state)) v.alt = !v.alt;
+      if (e.state === 'dodge') v.dodgeClip = dodgeClip(e.face, e.vx, e.vy);
+      if (e.state === 'stagger') v.hitClip = Math.random() < 0.5 ? 'Hit_A' : 'Hit_B';
+    }
+    const p = prog(e), def = v.def;
+    if (P.state === 'dead' && e.state === 'move') loopAnim(v, def.undead ? 'Taunt' : 'Cheer', 1, 0.3);
+    else {
+      switch (e.state) {
+        case 'spawn':
+          if (def.undead) scrub(v, 'Spawn_Ground_Skeletons', p, [0, 1], [0.05, 0.55], 0.01, false);
+          else loopAnim(v, def.idle, 1, 0.01);
+          break;
+        case 'stagger': scrub(v, v.hitClip, p, [0, 1], [0.05, 0.85], 0.05, v.alt); break;
+        case 'stun':
+          if (def.undead) loopAnim(v, 'Skeleton_Inactive_Standing_Pose', 1, 0.2);
+          else scrub(v, 'Hit_B', p, [0, 0.15, 1], [0, 0.45, 0.5], 0.08, v.alt);
+          break;
+        case 'dodge': scrub(v, v.dodgeClip, p, [0, 1], [0.02, 0.85], 0.05, v.alt); break;
+        case 'move': locomotion(v, e.vx, e.vy, e.face, def.idle); break;
+        default: MODEL_ANIM[e.type](v, e, p);
+      }
+    }
+    v.mixer.update(dt);
+    v.root.rotation.y = Math.PI / 2 - e.face;
+    v.root.position.y = e.state === 'spawn' && !def.undead ? -v.height * 1.05 * (1 - easeOut(p)) : 0;
+    if (v.aura) v.aura.rotation.y += dt * 1.5;
+    applyFlinch(v, e, e.face);
+    tint(v, e.hitFlash > 0 ? 'flash' : 'none');
+  }
+  function animateCorpse(v, dt) {
+    v.deadT += dt;
+    if (v.isModel) {
+      if (!v.died) { v.died = true; onceAnim(v, v.def.undead ? 'Death_C_Skeletons' : 'Death_A', 1, 0.08); }
+      v.mixer.update(dt);
+      v.tilt.rotation.set(0, 0, 0); v.tilt.position.set(0, 0, 0);
+      v.root.position.y = -Math.max(0, v.deadT - 1.6) * 0.8;
+      tint(v, 'none');
+      return v.deadT > 3;
+    }
+    const f = easeOut(Math.min(1, v.deadT * 2.6));
+    v.root.rotation.x = -f * Math.PI / 2;
+    v.root.position.y = 0.1 * v.scale * f - Math.max(0, v.deadT - 1.1) * 0.9;
+    applyPose(v, Object.assign(restPose(), { rx: 0.3, rOut: 1.1, lx: 0.3, lOut: 1.1, head: -0.4 }), expK(10, dt));
+    return v.deadT > 2.6;
+  }
+
   // ---------- Vistas (ligação entre simulação e modelos) ----------
   const views = new Map();
   const corpses = [];
-  const playerView = buildHumanoid('player');
+  let playerView = buildView('player');
   scene.add(playerView.root);
   let menuViews = [];
   function buildMenuLineup() {
+    for (const v of menuViews) disposeView(v);
     const lineup = [['grunt', -3.2, -1.5], ['archer', -1.6, -3.3], ['brute', 1.9, -3.2], ['rogue', 3.4, -1.3], ['grunt', 0.2, 3.4]];
     menuViews = lineup.map(([k, x, z]) => {
-      const v = buildHumanoid(k);
+      const v = buildView(k);
       v.root.position.set(x, 0, z);
       v.menuFace = Math.atan2(-z, -x);
       scene.add(v.root);
@@ -2265,6 +2606,21 @@
     for (const v of menuViews) disposeView(v);
     menuViews = [];
     playerView.deadT = 0;
+    if (playerView.isModel) { playerView.mixer.stopAllAction(); playerView.cur = null; playerView.key = null; }
+  }
+  // Botão de jogar espera os modelos (ou a falha deles) para não trocar de visual no meio da luta
+  {
+    const btns = document.querySelectorAll('#menu [data-start]');
+    if (!MODELS.settled) btns.forEach((b) => { b.disabled = true; b.dataset.label = b.textContent; b.textContent = 'CARREGANDO…'; });
+    modelsPromise.then((ok) => {
+      if (ok) {
+        disposeView(playerView);
+        playerView = buildView('player');
+        scene.add(playerView.root);
+        if (G.state === 'menu') buildMenuLineup();
+      }
+      btns.forEach((b) => { b.disabled = false; if (b.dataset.label) b.textContent = b.dataset.label; });
+    });
   }
 
   // ---------- Telegrafias no chão ----------
@@ -2510,15 +2866,25 @@
     // jogador
     const plx = lerp(P.px, P.x, alpha) * U, plz = lerp(P.py, P.y, alpha) * U;
     playerView.root.position.x = plx; playerView.root.position.z = plz;
+    const animP = (dt) => {
+      if (playerView.isModel) animateModelPlayer(playerView, dt);
+      else { animatePlayer(playerView, dt); applyFlinch(playerView, P, P.face); }
+    };
     if (G.state === 'menu') {
       playerView.root.position.set(0, 0, 0);
       P.face = realT * 0.1 + 1.2;
-      animatePlayer(playerView, rdt);
-    } else animatePlayer(playerView, adt);
+      animP(rdt);
+    } else animP(P.freeze > 0 ? 0 : adt); // hitstop local: a animação congela junto
     playerView.ix = plx; playerView.iz = plz;
 
     // desfile de inimigos no menu
     for (const v of menuViews) {
+      if (v.isModel) {
+        loopAnim(v, v.def.idle, 1, 0);
+        v.mixer.update(rdt);
+        v.root.rotation.y = Math.PI / 2 - v.menuFace;
+        continue;
+      }
       const fake = { type: v.kind, state: 'move', st: 0, stTotal: 0, vx: 0, vy: 0, face: v.menuFace, hitFlash: 0 };
       animateEnemy(v, fake, rdt);
       v.root.position.y = 0;
@@ -2528,27 +2894,24 @@
     const alive = new Set(G.enemies);
     for (const e of G.enemies) {
       let v = views.get(e);
-      if (!v) { v = buildHumanoid(e.type, e.elite); views.set(e, v); scene.add(v.root); }
+      if (!v) { v = buildView(e.type, e.elite); views.set(e, v); scene.add(v.root); }
       const x = lerp(e.px, e.x, alpha) * U, z = lerp(e.py, e.y, alpha) * U;
       v.root.position.x = x; v.root.position.z = z;
       v.ix = x; v.iz = z;
-      animateEnemy(v, e, adt);
+      const dE = e.freeze > 0 ? 0 : adt;
+      if (v.isModel) animateModelEnemy(v, e, dE);
+      else { animateEnemy(v, e, dE); applyFlinch(v, e, e.face); }
       updateTelegraph(v, e, x, z);
     }
     for (const [e, v] of views) {
       if (alive.has(e)) continue;
       views.delete(e);
       if (v.tele) for (const k in v.tele) v.tele[k].visible = false;
-      if (e.dead) { v.deadT = 0; setFlash(v, false); corpses.push(v); } else disposeView(v);
+      if (e.dead) { v.deadT = 0; if (v.isModel) tint(v, 'none'); else setFlash(v, false); corpses.push(v); } else disposeView(v);
     }
     for (let i = corpses.length - 1; i >= 0; i--) {
       const v = corpses[i];
-      v.deadT += adt;
-      const f = easeOut(Math.min(1, v.deadT * 2.6));
-      v.root.rotation.x = -f * Math.PI / 2;
-      v.root.position.y = 0.1 * v.scale * f - Math.max(0, v.deadT - 1.1) * 0.9;
-      applyPose(v, Object.assign(restPose(), { rx: 0.3, rOut: 1.1, lx: 0.3, lOut: 1.1, head: -0.4 }), expK(10, adt));
-      if (v.deadT > 2.6) { disposeView(v); corpses.splice(i, 1); }
+      if (animateCorpse(v, adt)) { disposeView(v); corpses.splice(i, 1); }
     }
 
     // efeitos
@@ -2722,6 +3085,7 @@
   $('bestScore').textContent = best.toLocaleString('pt-BR');
 
   function startGame() {
+    if (!MODELS.settled) return; // ainda carregando os modelos
     Sound.init(); Sound.resume();
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     if (isTouch()) {
@@ -2730,7 +3094,7 @@
     }
     Object.assign(G, {
       state: 'play', time: 0, wave: 0, score: 0, kills: 0, parries: 0, bestCombo: 0,
-      combo: 0, comboT: 0, freeze: 0, slowT: 0, slowScale: 1, trauma: 0, hurtFlash: 0,
+      combo: 0, comboT: 0, slowT: 0, slowScale: 1, trauma: 0, hurtFlash: 0,
       enemies: [], projectiles: [], particles: [], texts: [], orbs: [], slashes: [], ghosts: [], rings: [],
       spawnQueue: [], spawnT: 0, waveDelay: 0, dirT: 0, overT: -1,
     });
@@ -2792,5 +3156,5 @@
   resetPlayer();
 
   // Gancho para testes automatizados (index.html?debug)
-  if (/[?&]debug\b/.test(location.search)) window.__LR = { G, P, startGame, zoom: (d) => { camDist = d; } };
+  if (/[?&]debug\b/.test(location.search)) window.__LR = { G, P, startGame, makeEnemy, zoom: (d) => { camDist = d; } };
 })();

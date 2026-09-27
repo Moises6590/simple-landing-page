@@ -331,7 +331,7 @@
     state: 'menu', // menu | play | paused | over
     time: 0, wave: 0, score: 0, kills: 0, parries: 0, bestCombo: 0,
     combo: 0, comboT: 0,
-    freeze: 0, slowT: 0, slowScale: 1,
+    slowT: 0, slowScale: 1,
     trauma: 0, hurtFlash: 0,
     enemies: [], projectiles: [], particles: [], texts: [], orbs: [], slashes: [], ghosts: [], rings: [],
     spawnQueue: [], spawnT: 0, waveDelay: 0, maxAlive: 5, maxMelee: 2, maxRanged: 1,
@@ -341,7 +341,14 @@
   const cam = { x: 0, y: 0, px: 0, py: 0 };
   let threatId = 0;
 
-  function hitstop(t) { G.freeze = Math.max(G.freeze, t); }
+  // Hitstop local: congela só quem bateu e quem apanhou; o resto da luta continua.
+  function hitstop(t, ...ents) {
+    for (const o of ents) if (o) o.freeze = Math.max(o.freeze || 0, t);
+  }
+  function tickFreeze(o, dt) {
+    if (o.freeze > 0) { o.freeze -= dt; return true; }
+    return false;
+  }
   function slowmo(t, scale) {
     G.slowScale = G.slowT > 0 ? Math.min(G.slowScale, scale) : scale;
     G.slowT = Math.max(G.slowT, t);
@@ -378,6 +385,7 @@
       x: 0, y: 80, px: 0, py: 80, vx: 0, vy: 0, face: -Math.PI / 2,
       hp: P.maxHp, st: P.maxSt, stDelay: 0, state: 'idle', t: 0, atk: null,
       comboIdx: -1, comboWindow: 0, iframe: 0, dashCd: 0, parryT: 0, threat: null,
+      freeze: 0, confirm: false, flinchT: 0, flinchA: 0, flinchK: 1, actionId: 0,
     });
     P.hitSet.clear();
   }
@@ -414,10 +422,16 @@
     return { ang: Math.atan2(best.y - P.y, best.x - P.x), target: best, dist: len(best.x - P.x, best.y - P.y) };
   }
 
+  // Janelas de cancelamento. Acertou (P.confirm): pode sair do golpe já na metade dele.
+  // Errou: a recuperação trava por WHIFF_LOCK antes de esquivar/aparar.
+  const WHIFF_LOCK = 0.08;
+  function inStrike(a) { return P.t >= a.wind && P.t < a.wind + a.active; }
+  function strikeCancel(a) { return P.confirm && P.t >= a.wind + a.active * 0.5; }
+  function afterStrike(a, lock) { return P.t >= a.wind + a.active + (P.confirm ? 0 : lock); }
   function canAttackNow() {
     switch (P.state) {
       case 'idle': return true;
-      case 'attack': return P.t >= P.atk.wind + P.atk.active; // cancela a recuperação
+      case 'attack': return P.t >= P.atk.wind + P.atk.active * (P.confirm ? 0.7 : 1); // cancela a recuperação
       case 'heavy': return P.t >= HEAVY.wind + HEAVY.active + HEAVY.rec * 0.45;
       case 'dash': return P.t >= PL.dashTime * 0.55; // ataque em investida
       case 'parry': return P.t >= PL.parryWindow;
@@ -428,8 +442,8 @@
     if (P.dashCd > 0 || P.st < PL.dashCost) return false;
     switch (P.state) {
       case 'idle': case 'parry': return true;
-      case 'attack': return P.t < P.atk.wind || P.t >= P.atk.wind + P.atk.active;
-      case 'heavy': return P.t < HEAVY.wind || P.t >= HEAVY.wind + HEAVY.active;
+      case 'attack': return P.t < P.atk.wind || (inStrike(P.atk) ? strikeCancel(P.atk) : afterStrike(P.atk, WHIFF_LOCK));
+      case 'heavy': return P.t < HEAVY.wind || (inStrike(HEAVY) ? strikeCancel(HEAVY) : afterStrike(HEAVY, WHIFF_LOCK * 1.5));
       case 'hurt': return P.t >= 0.12;
       default: return false;
     }
@@ -437,8 +451,8 @@
   function canParryNow() {
     switch (P.state) {
       case 'idle': return true;
-      case 'attack': return P.t >= P.atk.wind + P.atk.active;
-      case 'heavy': return P.t >= HEAVY.wind + HEAVY.active;
+      case 'attack': return P.t < P.atk.wind || (inStrike(P.atk) ? strikeCancel(P.atk) : afterStrike(P.atk, WHIFF_LOCK));
+      case 'heavy': return P.t < HEAVY.wind || (inStrike(HEAVY) ? strikeCancel(HEAVY) : afterStrike(HEAVY, WHIFF_LOCK * 1.5));
       case 'dash': return P.t >= PL.dashTime * 0.6;
       default: return false;
     }
@@ -468,7 +482,7 @@
   function startAttack(idx, mv) {
     const a = COMBO[idx];
     const aim = aimAssist(mv, a.range);
-    P.state = 'attack'; P.t = 0; P.atk = a; P.comboIdx = idx;
+    P.state = 'attack'; P.t = 0; P.atk = a; P.comboIdx = idx; P.confirm = false; P.actionId++;
     P.lunged = false; P.hitSet.clear();
     P.swingSide = idx === 1 ? -1 : 1;
     P.face = aim.ang;
@@ -478,7 +492,7 @@
   }
   function startHeavy(mv) {
     const aim = aimAssist(mv, HEAVY.range);
-    P.state = 'heavy'; P.t = 0; P.lunged = false; P.hitSet.clear();
+    P.state = 'heavy'; P.t = 0; P.lunged = false; P.hitSet.clear(); P.confirm = false; P.actionId++;
     P.face = aim.ang;
     P.st -= PL.heavyCost; P.stDelay = 0.7;
     P.comboWindow = 0; P.comboIdx = -1;
@@ -489,7 +503,7 @@
     if (mv.m < 0.2) { dx = Math.cos(P.face); dy = Math.sin(P.face); }
     const m = len(dx, dy) || 1;
     P.dashX = dx / m; P.dashY = dy / m;
-    P.state = 'dash'; P.t = 0;
+    P.state = 'dash'; P.t = 0; P.actionId++;
     P.iframe = Math.max(P.iframe, PL.dashTime + 0.05);
     P.st -= PL.dashCost; P.stDelay = 0.55;
     P.dashCd = PL.dashTime + PL.dashCd;
@@ -510,13 +524,14 @@
       if (d < bd) { bd = d; best = pr; }
     }
     P.face = best ? Math.atan2(best.y - P.y, best.x - P.x) : baseAim(mv);
-    P.state = 'parry'; P.t = 0;
+    P.state = 'parry'; P.t = 0; P.actionId++;
     P.parryT = PL.parryWindow;
     P.threat = null;
   }
 
   function playerStep(dt) {
     const mv = readMove();
+    P.flinchT -= dt;
     P.iframe -= dt; P.dashCd -= dt; P.parryT -= dt; P.comboWindow -= dt; P.stDelay -= dt;
     if (P.stDelay <= 0) P.st = Math.min(P.maxSt, P.st + 40 * dt);
 
@@ -621,7 +636,7 @@
       const ang = Math.atan2(dy, dx);
       if (Math.abs(angDiff(P.face, ang)) > a.arc / 2 && d > e.r + P.r + 6) continue;
       P.hitSet.add(e);
-      damageEnemy(e, a.dmg, ang, a.kb, a.poise, { stop: a.stop, finisher: a.finisher });
+      if (damageEnemy(e, a.dmg, ang, a.kb, a.poise, { stop: a.stop, finisher: a.finisher })) P.confirm = true;
     }
     // Golpes cortam/rebatem flechas.
     for (const pr of G.projectiles) {
@@ -638,7 +653,7 @@
       const dx = e.x - P.x, dy = e.y - P.y, d = len(dx, dy);
       if (d > HEAVY.range + e.r) continue;
       P.hitSet.add(e);
-      damageEnemy(e, HEAVY.dmg, Math.atan2(dy, dx), HEAVY.kb, HEAVY.poise, { stop: HEAVY.stop, heavy: true });
+      if (damageEnemy(e, HEAVY.dmg, Math.atan2(dy, dx), HEAVY.kb, HEAVY.poise, { stop: HEAVY.stop, heavy: true })) P.confirm = true;
     }
     for (const pr of G.projectiles) {
       if (pr.friendly || pr.dead) continue;
@@ -662,11 +677,12 @@
     }
     P.hp -= dmg;
     P.iframe = 0.55;
+    P.flinchT = FLINCH_TIME; P.flinchA = ang; P.flinchK = 1.3;
     P.state = 'hurt'; P.t = 0; P.threat = null; P.atk = null;
     P.vx = Math.cos(ang) * kb; P.vy = Math.sin(ang) * kb;
     G.combo = 0; G.comboT = 0;
     G.hurtFlash = 0.35;
-    hitstop(0.07); shake(0.45);
+    hitstop(0.07, P, src.type ? src : null); shake(0.45);
     Sound.play('hurt'); vibrate(45);
     burst(P.x, P.y, ang, 12, '#ff5a6a', 260);
     addText(P.x, P.y - 26, '-' + Math.round(dmg), '#ff5a6a', 18);
@@ -684,11 +700,11 @@
     e.token = false;
     const a = Math.atan2(e.y - P.y, e.x - P.x);
     e.vx = Math.cos(a) * 320 / e.mass; e.vy = Math.sin(a) * 320 / e.mass;
-    parryFx((P.x + e.x) / 2, (P.y + e.y) / 2);
+    parryFx((P.x + e.x) / 2, (P.y + e.y) / 2, e);
     addText(e.x, e.y - e.r - 18, 'APARADO!', '#ffe27a', 18);
   }
-  function parryFx(x, y) {
-    hitstop(0.13); slowmo(0.5, 0.3); shake(0.35);
+  function parryFx(x, y, e) {
+    hitstop(0.13, P, e); slowmo(0.5, 0.3); shake(0.35);
     P.st = Math.min(P.maxSt, P.st + 35);
     P.parryT = 0; P.state = 'idle';
     G.parries++;
@@ -721,6 +737,7 @@
       seenThreat: -1, hitDone: false, strafeDir: Math.random() < 0.5 ? 1 : -1, strafeT: rand(1, 2),
       side: Math.random() < 0.5 ? 1 : -1, aimAng: 0, strikes: 0, chargeHit: null,
       tempo: 1, elite: !!elite, dead: false,
+      freeze: 0, flinchT: 0, flinchA: 0, flinchK: 1,
     };
     e.face = Math.atan2(P.y - y, P.x - x);
     if (elite) {
@@ -732,6 +749,9 @@
     return e;
   }
   function setState(e, s, t) { e.state = s; e.st = t; e.stTotal = t; }
+  const FLINCH_TIME = 0.16;
+  // 0 → 1 → 0 ao longo do tranco
+  function flinchAmount(o) { return o.flinchT > 0 ? Math.sin((1 - o.flinchT / FLINCH_TIME) * Math.PI) * o.flinchK : 0; }
   function want(e, vx, vy, acc) { e.dvx = vx; e.dvy = vy; e.acc = acc; }
   function seekTo(e, tx, ty, speed, arrive) {
     const dx = tx - e.x, dy = ty - e.y, d = len(dx, dy);
@@ -915,7 +935,7 @@
             if (o === e || o.dead || o.state === 'spawn' || e.chargeHit.has(o)) continue;
             if (len(o.x - e.x, o.y - e.y) < e.r + o.r + 4) {
               e.chargeHit.add(o);
-              damageEnemy(o, 18, e.face, 520, 60, { fromEnemy: true, stop: 0.03 });
+              damageEnemy(o, 18, e.face, 520, 60, { fromEnemy: true, src: e, stop: 0.03 });
             }
           }
           if (e.st <= 0) setState(e, 'recover', 0.6);
@@ -996,6 +1016,7 @@
   }
 
   function updateEnemy(e, dt) {
+    e.flinchT -= dt;
     e.st -= dt; e.atkCd -= dt; e.dodgeCd -= dt; e.iframe -= dt; e.hitFlash -= dt; e.poiseDelay -= dt;
     if (e.poiseDelay <= 0) e.poise = Math.min(e.maxPoise, e.poise + e.maxPoise * 0.6 * dt);
     if (e.token) e.tokenT += dt; else if (e.state === 'move') e.waitT += dt;
@@ -1149,6 +1170,8 @@
     dmg = Math.round(dmg);
     e.hp -= dmg;
     e.hitFlash = 0.1;
+    // tranco visual na direção do golpe; mais forte em finalizador/pesado
+    e.flinchT = FLINCH_TIME; e.flinchA = ang; e.flinchK = o.heavy || o.finisher ? 1.6 : 1;
     const km = kb / e.mass;
     e.vx += Math.cos(ang) * km; e.vy += Math.sin(ang) * km;
     if (e.state !== 'stun') {
@@ -1159,7 +1182,7 @@
         e.token = false;
       }
     }
-    hitstop(o.stop || 0.04);
+    hitstop(o.stop || 0.04, e, o.src === undefined ? P : o.src);
     if (o.finisher || o.heavy) shake(0.22); else shake(0.08);
     burst(e.x, e.y, ang, crit ? 14 : 8, crit ? '#ffe27a' : e.color, crit ? 380 : 300);
     addText(e.x + rand(-8, 8), e.y - e.r - 10, crit ? dmg + '!' : String(dmg), crit ? '#ffe27a' : '#ffffff', crit ? 19 : 14);
@@ -1222,7 +1245,7 @@
         for (const e of G.enemies) {
           if (e.dead || e.state === 'spawn') continue;
           if (len(pr.x - e.x, pr.y - e.y) < pr.r + e.r) {
-            damageEnemy(e, pr.dmg, ang, 300, 30, { stop: 0.05 });
+            damageEnemy(e, pr.dmg, ang, 300, 30, { src: null, stop: 0.05 });
             pr.dead = true; break;
           }
         }
@@ -1336,7 +1359,7 @@
     G.particles = G.particles.filter((p) => p.life > 0);
     for (const t of G.texts) { t.life -= dt; t.y -= 40 * dt; }
     G.texts = G.texts.filter((t) => t.life > 0);
-    for (const s of G.slashes) s.t += dt;
+    if (!(P.freeze > 0)) for (const s of G.slashes) s.t += dt; // o rastro congela junto com o golpe
     G.slashes = G.slashes.filter((s) => s.t < s.dur + 0.12);
     for (const g of G.ghosts) g.life -= dt;
     G.ghosts = G.ghosts.filter((g) => g.life > 0);
@@ -1359,7 +1382,6 @@
     G.trauma = Math.max(0, G.trauma - 1.8 * dt);
     G.hurtFlash = Math.max(0, G.hurtFlash - dt);
     if (G.banner.t > 0) G.banner.t -= dt;
-    if (G.freeze > 0) { G.freeze -= dt; return; } // hitstop: congela o mundo por alguns ms
 
     let scale = 1;
     if (G.slowT > 0) {
@@ -1372,9 +1394,10 @@
 
     if (G.comboT > 0) { G.comboT -= sdt; if (G.comboT <= 0) G.combo = 0; }
 
-    playerStep(sdt);
+    // Congelamento do hitstop conta em tempo real (não desacelera com o slow motion).
+    if (!tickFreeze(P, dt)) playerStep(sdt);
     director(sdt);
-    for (const e of G.enemies) if (!e.dead) updateEnemy(e, sdt);
+    for (const e of G.enemies) if (!e.dead && !tickFreeze(e, dt)) updateEnemy(e, sdt);
     resolveBodies();
     updateProjectiles(sdt);
     updateOrbs(sdt);
@@ -1524,6 +1547,8 @@
   }
 
   function drawEnemy(e, x, y) {
+    const fk = flinchAmount(e); // tranco do golpe
+    if (fk) { x += Math.cos(e.flinchA) * 6 * fk; y += Math.sin(e.flinchA) * 6 * fk; }
     if (e.state === 'spawn') {
       const p = 1 - e.st / e.stTotal;
       ctx.strokeStyle = `rgba(255,77,94,${0.8 - p * 0.4})`;
@@ -1608,6 +1633,8 @@
     return P.face + 1.0;
   }
   function drawPlayer(x, y) {
+    const fk = flinchAmount(P);
+    if (fk) { x += Math.cos(P.flinchA) * 6 * fk; y += Math.sin(P.flinchA) * 6 * fk; }
     shadow(x, y, P.r);
     if (P.state === 'dead') { ctx.globalAlpha = 0.5; }
     const blink = P.iframe > 0 && P.state !== 'dash' && Math.floor(G.time * 30) % 2 === 0;
@@ -1831,7 +1858,7 @@
     }
     Object.assign(G, {
       state: 'play', time: 0, wave: 0, score: 0, kills: 0, parries: 0, bestCombo: 0,
-      combo: 0, comboT: 0, freeze: 0, slowT: 0, slowScale: 1, trauma: 0, hurtFlash: 0,
+      combo: 0, comboT: 0, slowT: 0, slowScale: 1, trauma: 0, hurtFlash: 0,
       enemies: [], projectiles: [], particles: [], texts: [], orbs: [], slashes: [], ghosts: [], rings: [],
       spawnQueue: [], spawnT: 0, waveDelay: 0, dirT: 0, overT: -1,
     });
@@ -1892,5 +1919,5 @@
   resetPlayer();
 
   // Gancho para testes automatizados (index.html?debug)
-  if (/[?&]debug\b/.test(location.search)) window.__LR = { G, P, startGame };
+  if (/[?&]debug\b/.test(location.search)) window.__LR = { G, P, startGame, makeEnemy };
 })();
