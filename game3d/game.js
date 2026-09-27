@@ -2273,6 +2273,9 @@
   // =========================================================================
   const EX = window.THREE_EXTRAS || {};
   const ASSET_BASE = 'assets/';
+  // Página autocontida: modelos (JSON) e texturas (data URI) podem vir embutidos em window.__ASSETS
+  const EMBED = window.__ASSETS || null;
+  const BUILD = 'build 4';
   const MODEL_DEFS = {
     player: { file: 'knight.glb', h: 1.85, idle: 'Idle' },
     grunt: { file: 'skeleton_warrior.glb', h: 1.8, idle: 'Idle_Combat', right: 'skeleton_blade.glb', left: 'skeleton_shield.glb', undead: true },
@@ -2295,7 +2298,7 @@
   };
   const COMBO_CLIPS = ['1H_Melee_Attack_Slice_Diagonal', '1H_Melee_Attack_Slice_Horizontal', '1H_Melee_Attack_Chop'];
   const MODELS = { ready: false, settled: false, gltf: {} };
-  const canLoadAssets = location.protocol !== 'file:' && !!EX.GLTFLoader && !!EX.SkeletonUtils;
+  const canLoadAssets = (!!EMBED || location.protocol !== 'file:') && !!EX.GLTFLoader && !!EX.SkeletonUtils;
   const modelsPromise = (() => {
     if (!canLoadAssets) {
       MODELS.settled = true;
@@ -2305,7 +2308,21 @@
     const loader = new EX.GLTFLoader();
     if (EX.MeshoptDecoder) loader.setMeshoptDecoder(EX.MeshoptDecoder);
     const files = [...new Set(Object.values(MODEL_DEFS).flatMap((d) => [d.file, d.right, d.left]).filter(Boolean))];
-    return Promise.all(files.map((f) => loader.loadAsync(ASSET_BASE + f).then((g) => { MODELS.gltf[f] = g; })))
+    // embutido: GLB em base64 → ArrayBuffer (nenhuma requisição de rede)
+    const b64ToBuffer = (b64) => {
+      const bin = atob(b64), u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      return u8.buffer;
+    };
+    const parseEmbedded = (f) => new Promise((res, rej) => {
+      // Sem createImageBitmap o GLTFLoader decodifica as texturas por <img> (blob:) em vez de fetch(),
+      // que páginas com política restrita bloqueiam. A escolha é feita ao criar o parser (síncrono).
+      const cib = window.createImageBitmap;
+      try { window.createImageBitmap = undefined; } catch (_) { /* ignora */ }
+      try { loader.parse(b64ToBuffer(EMBED[f]), '', res, rej); } finally { window.createImageBitmap = cib; }
+    });
+    const loadOne = (f) => (EMBED && EMBED[f] ? parseEmbedded(f) : loader.loadAsync(ASSET_BASE + f));
+    return Promise.all(files.map((f) => loadOne(f).then((g) => { MODELS.gltf[f] = g; })))
       .then(() => { MODELS.ready = true; return true; })
       .catch((err) => {
         console.warn('Modelos 3D indisponíveis; usando personagens procedurais.', err);
@@ -2318,7 +2335,7 @@
   // Texturas de pedra (Poly Haven, CC0) por cima das procedurais
   if (canLoadAssets) {
     const tl = new THREE.TextureLoader();
-    const load = (f, srgb, cb) => tl.load(ASSET_BASE + f, (t) => {
+    const load = (f, srgb, cb) => tl.load(EMBED && EMBED[f] ? EMBED[f] : ASSET_BASE + f, (t) => {
       t.wrapS = t.wrapT = THREE.RepeatWrapping;
       t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
       if (srgb) t.colorSpace = THREE.SRGBColorSpace;
@@ -2628,12 +2645,11 @@
         if (G.state === 'menu') buildMenuLineup();
       }
       btns.forEach((b) => { b.disabled = false; if (b.dataset.label) b.textContent = b.dataset.label; });
-      if (!ok) { // deixa claro por que os personagens são os simples
-        const note = document.createElement('p');
-        note.className = 'best';
-        note.textContent = 'Personagens simplificados: ' + (MODELS.error || 'modelos 3D não carregaram');
-        document.querySelector('#menu .best').after(note);
-      }
+      // selo de versão + status dos modelos (deixa claro qual build abriu)
+      const note = document.createElement('p');
+      note.className = 'best';
+      note.textContent = BUILD + ' · ' + (ok ? 'personagens animados' : 'personagens simplificados: ' + (MODELS.error || 'modelos 3D não carregaram'));
+      document.querySelector('#menu .best').after(note);
     });
   }
 

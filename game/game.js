@@ -1848,6 +1848,12 @@
   let best = 0;
   try { best = +localStorage.getItem('laminaRubraBest') || 0; } catch (_) { /* ignora */ }
   $('bestScore').textContent = best.toLocaleString('pt-BR');
+  { // selo de versão: deixa claro qual build abriu
+    const note = document.createElement('p');
+    note.className = 'best';
+    note.textContent = 'build 4 · hitstop local · cancelamento por acerto · tranco nos golpes';
+    document.querySelector('#menu .best').after(note);
+  }
 
   function startGame() {
     Sound.init(); Sound.resume();
