@@ -2297,13 +2297,21 @@
   const MODELS = { ready: false, settled: false, gltf: {} };
   const canLoadAssets = location.protocol !== 'file:' && !!EX.GLTFLoader && !!EX.SkeletonUtils;
   const modelsPromise = (() => {
-    if (!canLoadAssets) { MODELS.settled = true; return Promise.resolve(false); }
+    if (!canLoadAssets) {
+      MODELS.settled = true;
+      MODELS.error = location.protocol === 'file:' ? 'abra o jogo por um servidor (http) para carregar os modelos' : 'carregador de modelos indisponível';
+      return Promise.resolve(false);
+    }
     const loader = new EX.GLTFLoader();
     if (EX.MeshoptDecoder) loader.setMeshoptDecoder(EX.MeshoptDecoder);
     const files = [...new Set(Object.values(MODEL_DEFS).flatMap((d) => [d.file, d.right, d.left]).filter(Boolean))];
     return Promise.all(files.map((f) => loader.loadAsync(ASSET_BASE + f).then((g) => { MODELS.gltf[f] = g; })))
       .then(() => { MODELS.ready = true; return true; })
-      .catch((err) => { console.warn('Modelos 3D indisponíveis; usando personagens procedurais.', err); return false; })
+      .catch((err) => {
+        console.warn('Modelos 3D indisponíveis; usando personagens procedurais.', err);
+        MODELS.error = (err && err.message) || String(err);
+        return false;
+      })
       .finally(() => { MODELS.settled = true; });
   })();
 
@@ -2620,6 +2628,12 @@
         if (G.state === 'menu') buildMenuLineup();
       }
       btns.forEach((b) => { b.disabled = false; if (b.dataset.label) b.textContent = b.dataset.label; });
+      if (!ok) { // deixa claro por que os personagens são os simples
+        const note = document.createElement('p');
+        note.className = 'best';
+        note.textContent = 'Personagens simplificados: ' + (MODELS.error || 'modelos 3D não carregaram');
+        document.querySelector('#menu .best').after(note);
+      }
     });
   }
 
