@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1115">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Lâmina Rubra — Hack &amp; Slash</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- Controles de toque (aparecem só em telas touch) -->
+  <div id="touch">
+    <div id="stickZone"></div>
+    <div id="stickBase"><div id="stickKnob"></div></div>
+    <button class="tbtn big" data-act="attack"><span>⚔</span><small>ATAQUE</small></button>
+    <button class="tbtn" data-act="heavy"><span>✹</span><small>PESADO</small></button>
+    <button class="tbtn" data-act="dash"><span>»</span><small>ESQUIVA</small></button>
+    <button class="tbtn" data-act="parry"><span>◈</span><small>APARAR</small></button>
+  </div>
+  <button id="pauseBtn" aria-label="Pausar">II</button>
+
+  <div id="menu" class="overlay show">
+    <div class="panel">
+      <h1>LÂMINA <span>RUBRA</span></h1>
+      <p class="sub">Hack &amp; slash de arena. Sobreviva às ondas.</p>
+      <button class="play" data-start>JOGAR</button>
+      <p class="best">Recorde: <b id="bestScore">0</b></p>
+      <div class="cols">
+        <div>
+          <h3>PC</h3>
+          <ul>
+            <li><kbd>WASD</kbd>/<kbd>Setas</kbd> mover</li>
+            <li><kbd>J</kbd> ou <kbd>Clique</kbd> ataque (combo x3)</li>
+            <li><kbd>K</kbd> ou <kbd>Botão dir.</kbd> ataque pesado</li>
+            <li><kbd>Espaço</kbd>/<kbd>Shift</kbd> esquiva</li>
+            <li><kbd>L</kbd>/<kbd>E</kbd> aparar (parry)</li>
+            <li>Mouse mira · <kbd>P</kbd>/<kbd>Esc</kbd> pausa</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Celular</h3>
+          <ul>
+            <li>Joystick: toque e arraste na metade esquerda</li>
+            <li>Botões à direita</li>
+            <li>Segure ATAQUE para encadear o combo</li>
+            <li>A mira gruda no inimigo mais próximo</li>
+          </ul>
+        </div>
+      </div>
+      <div class="tips">
+        <b>Dicas:</b> aparar no instante do golpe atordoa o inimigo (dano x1.6) e rebate flechas ·
+        esquivar no último momento deixa o tempo lento · ataques pelas costas causam crítico ·
+        o golpe <span class="orange">laranja</span> do Brutamontes não pode ser aparado ·
+        faça o Brutamontes investir contra pilares ou contra os aliados dele.
+      </div>
+    </div>
+  </div>
+
+  <div id="pause" class="overlay">
+    <div class="panel small">
+      <h2>PAUSADO</h2>
+      <button class="play" id="resumeBtn">CONTINUAR</button>
+      <button class="ghost" data-start>REINICIAR</button>
+    </div>
+  </div>
+
+  <div id="over" class="overlay">
+    <div class="panel small">
+      <h2>VOCÊ CAIU</h2>
+      <p id="overStats"></p>
+      <button class="play" data-start>JOGAR DE NOVO</button>
+      <a class="ghost" href="../index.html">VOLTAR AO SITE</a>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
