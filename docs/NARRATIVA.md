@@ -42,6 +42,24 @@ levantam quando chamados.
   nunca mais sinta frio, nem medo, nem vontade.
 - **A Figueira de Cinza.** Árvore milenar sob a cidade. Não fala; responde com raízes e seiva.
 
+### Os que sobrevivem com ela (personagens jogáveis)
+
+Cada companheiro é resgatado num capítulo e passa a lutar a partir daí (escolha na Figueira).
+A campanha continua sendo a história de Selen; os outros lutam o mesmo caminho.
+
+| Nome | Quem é | Como luta | Resgate |
+|---|---|---|---|
+| **Selen Varga, a Última Brasa** | a última juramentada | espada e broquel; apara melhor que todos e responde com a lâmina | — |
+| **Orsa Brunhald, a Quebra-Portões** | dividiu a cela das Fossas com Selen por dois invernos | machado de guerra; não recua durante os golpes pesados; agarra e arremessa | fim do Capítulo II, numa jaula da torre |
+| **Ilan Vesper, o Corta-Pavio** | assassino que desertou da Guilda na Noite da Brasa Fria | adagas; três esquivas seguidas; pelas costas o dano dobra | fim do Capítulo III, na fumaça da Fundição |
+| **Aurel Cinzafria, o Escriba** | arquivista da Ordem; copiou o nome da "lâmina dezessete" | magia de brasa e gelo, muralhas de cinza | Capítulo IV, atrás do altar da virada |
+
+**Armas** (três por herói, forjadas e temperadas na Figueira com Cinzas):
+Rubra, Vigia de Odila, As Irmãs de Brand · Quebra-Portões, Presa e Broquel, Machados Irmãos ·
+Pavios Gêmeos, Ferrão, Mãos da Rua Baixa · Cajado da Primeira Chama, Varinha do Arquivista, Tomo da Geada.
+
+**Artes do Juramento** (Fúria cheia): Sete Brasas · Terremoto de Ferrumbra · Mil Pavios · Chuva Invertida.
+
 ## Forças de Vezmir
 
 | Nome | O que é | Como luta |
@@ -54,7 +72,14 @@ levantam quando chamados.
 | **Carrasco de Brasa** | Rompe-Muralha coroado | mais rápido e mais forte |
 | **Bombarda de Magma** | canhão fixo que cospe lava | o tiro faz um arco por cima da cobertura e deixa uma poça ardendo |
 | **Vespa de Latão** | drone de engrenagens | zumbe em círculos e mergulha em enxame |
+| **Escudeiro Ossário** | morto de escudo grande | bloqueia de frente; forma muralha diante dos atiradores |
+| **Granadeiro da Guilda** | artilheiro vivo | granadas por cima da cobertura, onde o jogador se esconde |
+| **Capelão de Cinza** | sacerdote morto | reergue quem não foi executado; protege aliados com uma égide |
 | **Vezmir, o Fundidor** | o chefe | cajado, voleios de brasa, mortos erguidos e, por fim, chuva de lava |
+
+**Chefes intermediários:** Sargento Ossívio, o Primeiro a Levantar (I) · Mestra-Artilheira Brenna Fumaça (II) ·
+Fornalheiro Gorvan (III) · Irmã Engrenagem, a Tecelã (IV) · O Carrasco de Brasa (V). Quando o líder cai, o
+esquadrão vacila: parte foge, parte perde o medo.
 
 ## Estrutura
 

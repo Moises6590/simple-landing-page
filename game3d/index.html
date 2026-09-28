@@ -23,8 +23,11 @@
     <button class="tbtn" data-act="dash"><span>»</span><small>ESQUIVA</small></button>
     <button class="tbtn" data-act="parry"><span>◈</span><small>APARAR</small></button>
     <button class="tbtn small" data-act="lock"><span>◎</span><small>ALVO</small></button>
-    <button class="tbtn small" data-act="rage"><span>✦</span><small>FÚRIA</small></button>
+    <button class="tbtn small" data-act="rage"><span>✺</span><small>ARTE</small></button>
     <button class="tbtn small" data-act="heal"><span>◆</span><small>SEIVA</small></button>
+    <button class="tbtn small" data-act="sp1"><span>❶</span><small>ESPECIAL</small></button>
+    <button class="tbtn small" data-act="sp2"><span>❷</span><small>ESPECIAL</small></button>
+    <button class="tbtn small" data-act="bomb"><span>●</span><small>BOMBA</small></button>
   </div>
   <button id="pauseBtn" aria-label="Pausar">II</button>
 
@@ -34,6 +37,7 @@
   <div id="cineHint">Toque, clique ou Enter para avançar</div>
   <div id="chapterCard"><small></small><b></b></div>
   <div id="objective"></div>
+  <div id="hint"></div>
 
   <div id="menu" class="overlay show">
     <div class="panel main">
@@ -42,6 +46,7 @@
       <nav class="menuBtns">
         <button class="play" data-go="continue" id="btnContinue" hidden>CONTINUAR</button>
         <button class="play alt" data-go="new" id="btnNew">NOVA JORNADA</button>
+        <button data-go="figueira">A FIGUEIRA · HERÓIS E ARMAS</button>
         <button data-go="chapters">CAPÍTULOS</button>
         <button data-go="trial">PROVAÇÃO DAS CINZAS</button>
         <button data-go="codex">CÓDICE</button>
@@ -57,6 +62,17 @@
     <div class="panel">
       <h2>CAPÍTULOS</h2>
       <div id="chapterList" class="grid"></div>
+      <button class="ghost" data-go="back">VOLTAR</button>
+    </div>
+  </div>
+
+  <div id="figueira" class="overlay">
+    <div class="panel wide">
+      <h2>A FIGUEIRA DE CINZA</h2>
+      <p class="sub">As raízes guardam quem sobreviveu. Escolha quem luta e tempere as armas com as <b>Cinzas</b> que você trouxe.</p>
+      <div id="cinzasNote" class="cinzas"></div>
+      <div id="heroList" class="heroes"></div>
+      <div id="heroDetail" class="heroDetail"></div>
       <button class="ghost" data-go="back">VOLTAR</button>
     </div>
   </div>
@@ -105,12 +121,12 @@
           <h3>PC</h3>
           <ul>
             <li><kbd>WASD</kbd> mover · <kbd>Mouse</kbd> gira a câmera (clique para capturar)</li>
-            <li><kbd>Clique</kbd>/<kbd>J</kbd> ataque (combo x3)</li>
-            <li><kbd>Botão dir.</kbd>/<kbd>K</kbd> <b>segure</b> para carregar o pesado</li>
-            <li><kbd>Espaço</kbd> esquiva · atacar logo depois = <b>investida</b></li>
-            <li><kbd>E</kbd>/<kbd>L</kbd> aparar · <kbd>Q</kbd>/<kbd>Tab</kbd> travar alvo</li>
-            <li><kbd>H</kbd> beber Seiva · <kbd>R</kbd> Fúria</li>
-            <li><kbd>Setas</kbd> câmera · <kbd>F</kbd> FPS · <kbd>Esc</kbd> pausa</li>
+            <li><kbd>Clique</kbd>/<kbd>J</kbd> ataque · <kbd>Botão dir.</kbd>/<kbd>K</kbd> pesado (<b>segure</b> para carregar)</li>
+            <li><kbd>Espaço</kbd> esquiva longa · atacar logo depois = <b>investida</b></li>
+            <li><kbd>E</kbd>/<kbd>L</kbd> <b>toque</b> para aparar · <b>segure</b> para bloquear</li>
+            <li><kbd>Q</kbd> e <kbd>F</kbd> especiais · <kbd>R</kbd> Arte do Juramento (Fúria cheia)</li>
+            <li><kbd>G</kbd> bomba · <kbd>H</kbd> Seiva · <kbd>Tab</kbd>/<kbd>T</kbd>/botão do meio: travar alvo</li>
+            <li><kbd>Setas</kbd> câmera · <kbd>F3</kbd> FPS · <kbd>Esc</kbd> pausa</li>
           </ul>
         </div>
         <div>
@@ -122,6 +138,12 @@
             <li>SEIVA cura; FÚRIA acende com a barra vermelha cheia</li>
           </ul>
         </div>
+      </div>
+      <div class="tips">
+        <b>Combos:</b> leve, leve, leve · leve, leve, <b>pausa</b>, leve = golpe atrasado ·
+        leve + pesado = <b>lançar</b> · leve, leve + pesado = <b>quebra-guarda</b> · leve, leve, leve + pesado = <b>estocada</b> ·
+        ataque num inimigo no ar = golpe aéreo que o crava no chão · aparar e atacar logo = <b>Resposta</b> ·
+        esquivar no último instante abre a <b>BRECHA</b> (inimigos lentos). Execute atordoados perto de paredes ou lava.
       </div>
       <div class="tips">
         <b>Dicas:</b> aparar no instante do golpe atordoa — ataque o atordoado para uma <b>execução</b> ·
@@ -146,6 +168,7 @@
       <h2 id="resTitle"></h2>
       <div id="resStats"></div>
       <button class="play" data-go="next" id="resNext">PRÓXIMO CAPÍTULO</button>
+      <button class="ghost" data-go="figueira">A FIGUEIRA</button>
       <button class="ghost" data-go="menu">MENU</button>
     </div>
   </div>

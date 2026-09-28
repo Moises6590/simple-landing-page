@@ -88,3 +88,42 @@ There is also a light Windows build of about 4 MB in `tools/desktop-lite/`. It u
 ```bash
 node standalone.mjs desktop && cd desktop-lite && node build.mjs && npx @neutralinojs/neu build
 ```
+
+### Build 7: heróis, armas e combate mais fundo
+
+- **Quatro heróis jogáveis**, cada um com passiva, dois especiais e uma Arte do Juramento:
+  - Selen Varga (espada e broquel, especialista em aparar);
+  - Orsa Brunhald (machado; não é interrompida durante golpes pesados; agarra e arremessa);
+  - Ilan Vesper (adagas; três esquivas seguidas; dano dobrado pelas costas; marca alvos);
+  - Aurel Cinzafria (magia de brasa e gelo, Muralha de Cinza).
+
+  Orsa, Ilan e Aurel são resgatados durante a campanha.
+- **Doze armas**, três por herói. Cada arma muda o conjunto de golpes. Elas são forjadas e temperadas na **Figueira** com Cinzas, ganhas por abates, estilo e nota do capítulo.
+- **Defesa:**
+  - toque para aparar e segure para bloquear (gasta fôlego; sem fôlego a guarda quebra);
+  - **Resposta**: contra-ataque logo depois de um aparo;
+  - **Brecha**: a esquiva perfeita deixa os inimigos lentos por 1 s;
+  - esquiva com deslize duas vezes mais longo;
+  - projéteis rebatidos vão para onde você mira.
+- **Ataque:**
+  - golpe atrasado (leve, leve, pausa, leve);
+  - ramificações leve→pesado: lançar, quebra-guarda e estocada;
+  - malabarismo no ar e golpe que crava o inimigo no chão;
+  - bomba de brasa;
+  - execuções que mudam com o lugar: contra a parede, na lava, pelas costas e no chão, com câmera de cinema.
+- **Inimigos:**
+  - sequências de 1 a 3 golpes, fintas, investida em corrida, derrubar e levantar;
+  - chute quando o jogador chega perto demais;
+  - leitura de hábitos: lado preferido da esquiva, aparo em excesso, esconder-se;
+  - formações (muralha de escudos, um segura enquanto outro ataca pelas costas);
+  - moral que quebra quando o líder cai;
+  - três novos tipos: Escudeiro, Granadeiro e Capelão (este reergue os mortos não executados);
+  - cinco chefes intermediários com nome.
+- **Cenário interativo:**
+  - barris de pólvora que explodem em cadeia;
+  - colunas rachadas que tombam com golpe pesado;
+  - Bombarda que pode ser tomada;
+  - lâminas giratórias;
+  - portões que fecham a arena.
+- **Medidor de estilo** de D até "Brasa Viva", com multiplicador de pontos, e dicas de controle na primeira vez que cada mecânica aparece.
+- **Animações**: uma biblioteca única de animações compartilhada por todos os personagens, porque os KayKit usam o mesmo esqueleto. São 60 animações, e os modelos ficaram menores que antes.
