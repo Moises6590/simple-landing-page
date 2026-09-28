@@ -122,11 +122,112 @@
       supreme: () => { tone(220, 0.8, 'sawtooth', 0.2, 2); tone(330, 0.8, 'triangle', 0.16, 2); noise(0.6, 0.25, 900, 0.5); },
       brecha: () => { tone(1200, 0.5, 'sine', 0.14, 0.4); tone(300, 0.6, 'sine', 0.12, 0.6); },
     };
+    // ---------- Efeitos gravados (CC0) ----------
+    // audio/sfx/<nome>_<n>.mp3 (ou embutidos em window.__ASSETS na versão de arquivo único)
+    const SFX_COUNT = { swing: 5, heavy: 3, eswing: 4, hit: 5, crit: 5, bone: 6, clang: 6, parry: 4, blade: 6, hurt: 3, dash: 4, die: 5, slam: 2, boom: 6, gun: 4, lob: 5,
+      fireball: 6, bolt: 4, freeze: 5, throw: 3, blink: 5, roar: 3, grab: 4, special: 4, supreme: 2, brecha: 3, beep: 4, shoot: 3, drink: 4, font: 4, relic: 4, pickup: 4,
+      burn: 3, ambush: 2, wave: 2, crack: 4, step: 6, rise: 4, raise: 5, ui: 3, uiok: 3, buzz: 3 };
+    // volume de cada efeito (0–1) e variação de tom
+    const SFX_VOL = { step: 0.35, eswing: 0.7, beep: 0.55, burn: 0.5, pickup: 0.6, buzz: 0.4, ui: 0.6, uiok: 0.6, hit: 0.85, bone: 0.8, gun: 0.95, boom: 1, supreme: 0.9, ambush: 0.8 };
+    const SFX_ALIAS = { heavy: 'heavy', crit: 'crit' };
+    const bufs = {}, lastPlay = {}, lastIdx = {};
+    let sfxBus = null, loading = false;
+    const sfxVol = () => (window.__LR_SETTINGS ? window.__LR_SETTINGS.sfx : 0.9);
+    function b64buf(b64) { const bin = atob(b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return u8.buffer; }
+    function loadSamples() {
+      if (loading || !ac) return; loading = true;
+      sfxBus = ac.createGain(); sfxBus.gain.value = 1; sfxBus.connect(master);
+      const EMB = window.__ASSETS || {};
+      for (const name in SFX_COUNT) {
+        bufs[name] = [];
+        for (let i = 0; i < SFX_COUNT[name]; i++) {
+          const key = 'sfx/' + name + '_' + i + '.mp3';
+          const got = EMB[key] ? Promise.resolve(b64buf(EMB[key])) : (location.protocol === 'file:' ? Promise.reject(new Error('file')) : fetch('audio/' + key).then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }));
+          got.then((ab) => new Promise((res, rej) => ac.decodeAudioData(ab, res, rej))).then((buf) => { bufs[name].push(buf); }).catch(() => {});
+        }
+      }
+    }
+    // pan: -1 (esquerda) .. 1 (direita); dist: distância em px (atenua)
+    function sample(name, pan, dist) {
+      const list = bufs[name];
+      if (!list || !list.length || !sfxBus) return false;
+      const now = ac.currentTime;
+      if (lastPlay[name] && now - lastPlay[name] < 0.028) return true; // evita empilhar o mesmo som no mesmo quadro
+      lastPlay[name] = now;
+      let i = Math.floor(Math.random() * list.length);
+      if (list.length > 1 && i === lastIdx[name]) i = (i + 1) % list.length;
+      lastIdx[name] = i;
+      const src = ac.createBufferSource(); src.buffer = list[i];
+      src.playbackRate.value = 0.93 + Math.random() * 0.14;
+      const g = ac.createGain();
+      const att = dist ? clamp(1 - (dist - 250) / 1100, 0.12, 1) : 1;
+      g.gain.value = (SFX_VOL[name] || 0.9) * sfxVol() * att;
+      let node = src;
+      node.connect(g); node = g;
+      if (pan && ac.createStereoPanner) { const p = ac.createStereoPanner(); p.pan.value = clamp(pan, -0.85, 0.85); node.connect(p); node = p; }
+      node.connect(sfxBus);
+      src.start(now);
+      return true;
+    }
     return {
-      init,
+      init() { init(); loadSamples(); },
       resume() { if (ac && ac.state === 'suspended') ac.resume(); },
-      play(name) { if (sfx[name]) sfx[name](); },
+      // play(nome) ou play(nome, x, y) — com posição no mundo: estéreo e distância a partir do jogador/câmera
+      play(name, x, y) {
+        if (!ac) return;
+        let pan = 0, dist = 0;
+        if (x !== undefined && typeof P !== 'undefined') {
+          const dx = x - P.x, dy = y - P.y; dist = Math.hypot(dx, dy);
+          const rel = angDiff(CAMERA.yaw, Math.atan2(dy, dx));
+          pan = Math.sin(rel) * Math.min(1, dist / 220);
+        }
+        if (sample(SFX_ALIAS[name] || name, pan, dist)) return;
+        if (sfx[name] && sfxVol() > 0.01) sfx[name]();
+      },
+      get ctx() { return ac; },
+      stats() { let n = 0, t = 0; for (const k in bufs) { t++; if (bufs[k].length) n++; } return { names: t, loaded: n, state: ac ? ac.state : 'none' }; },
     };
+  })();
+
+  // =========================================================================
+  // Trilha sonora (Kevin MacLeod, CC BY 4.0 — créditos na tela final e em CREDITS.md)
+  //   Cada capítulo tem uma faixa de exploração e uma de combate; a troca é por crossfade.
+  // =========================================================================
+  const Music = (() => {
+    const els = {}, want = { name: null };
+    let enabled = false, cur = null, duck = 1;
+    const vol = () => (window.__LR_SETTINGS ? window.__LR_SETTINGS.music : 0.6);
+    function el(name) {
+      if (els[name]) return els[name];
+      const a = new Audio();
+      a.src = 'audio/music/' + name + '.mp3';
+      a.loop = true; a.preload = 'auto'; a.volume = 0;
+      a._v = 0; a._ok = true;
+      a.addEventListener('error', () => { a._ok = false; });
+      return (els[name] = a);
+    }
+    function start() { enabled = true; }
+    function set(name, fastIn) { want.name = name; want.fast = !!fastIn; }
+    // chamado a cada quadro: aproxima os volumes do alvo (crossfade)
+    function tick(dt) {
+      if (!enabled) return;
+      const target = want.name;
+      if (target && (!els[target] || els[target]._ok)) {
+        const a = el(target);
+        if (a.paused && a._ok) { const pr = a.play(); if (pr && pr.catch) pr.catch(() => { a._blocked = true; }); }
+        cur = target;
+      }
+      for (const n in els) {
+        const a = els[n];
+        const goal = n === target ? vol() * duck : 0;
+        const rate = n === target ? (want.fast ? 1.4 : 0.6) : 0.4; // entra rápido no combate, sai devagar
+        a._v += clamp(goal - a._v, -rate * dt, rate * dt);
+        a.volume = clamp(a._v, 0, 1);
+        if (a._v <= 0.001 && n !== target && !a.paused) a.pause();
+      }
+    }
+    return { start, set, tick, setDuck(d) { duck = d; }, get current() { return cur; },
+      stats() { const a = cur && els[cur]; return a ? { playing: !a.paused, t: +a.currentTime.toFixed(1), v: +a.volume.toFixed(2), ok: a._ok } : null; } };
   })();
 
   // =========================================================================
@@ -160,7 +261,7 @@
   };
   const BUFFER_TIME = 0.22; // janela de "buffer" de comandos (s)
   function queue(act) {
-    Sound.init(); Sound.resume();
+    Sound.init(); Sound.resume(); Music.start();
     Input.buffer.act = act;
     Input.buffer.t = BUFFER_TIME;
   }
@@ -684,7 +785,7 @@
           ob.landed = true;
           const L = ob.r * 5, a = ob.fallA, ux = Math.cos(a), uy = Math.sin(a);
           shake(0.6); Sound.play('slam'); vibrate(35);
-          for (let k = 1; k <= 4; k++) burst(ob.x + ux * L * k / 4, ob.y + uy * L * k / 4, 0, 10, '#8a8a90', 280, true);
+          for (let k = 1; k <= 4; k++) { burst(ob.x + ux * L * k / 4, ob.y + uy * L * k / 4, 0, 10, '#8a8a90', 280, true); fxq('dust', ob.x + ux * L * k / 4, ob.y + uy * L * k / 4, 70); }
           // quem estiver na linha da queda
           for (const e of G.enemies) {
             if (!targetable(e) || e.fly) continue;
@@ -1379,7 +1480,9 @@
     addText(P.x, P.y - 40, def.name.toUpperCase(), def.supreme ? '#ff7a3c' : '#ffb03c', def.supreme ? 22 : 16);
     Sound.play(def.supreme ? 'supreme' : 'special');
     styleAdd(def.supreme ? 60 : 25, id);
+    fxq('circle', P.x, P.y, { s0: 1.4, s1: 2.6, life: 0.6, color: def.supreme ? '#ff7a3c' : '#ffb03c' });
     if (def.supreme) {
+      fxq('supreme', P.x, P.y);
       P.iframe = Math.max(P.iframe, def.dur + 0.1);
       slowmo(0.35, 0.3);
       camFx('supreme', P, def.dur);
@@ -1428,11 +1531,12 @@
       const along = Math.abs(Math.cos(P.face)) < Math.abs(Math.sin(P.face));
       const ob = { b: 1, x: cx, y: cy, w: along ? 170 : 28, h: along ? 28 : 170, tall: true, temp: 7, conj: true };
       addObstacle(ob);
-      burst(cx, cy, 0, 30, '#8a7a6a', 260, true); shake(0.25); Sound.play('slam');
+      burst(cx, cy, 0, 30, '#8a7a6a', 260, true); fxq('dust', cx, cy, 90); shake(0.25); Sound.play('slam');
     },
     geada() {
       Sound.play('freeze'); shake(0.3);
       G.rings.push({ x: P.x, y: P.y, r: 20, max: 190, t: 0, dur: 0.5, color: '150,220,255' });
+      fxq('frost', P.x, P.y, 175);
       burst(P.x, P.y, 0, 36, '#bfe8ff', 360, true);
       for (const e of G.enemies) {
         if (!targetable(e) || e.state === 'lurk') continue;
@@ -1519,6 +1623,7 @@
             const R = s.radii[j];
             shake(0.5 + j * 0.15); Sound.play('slam'); vibrate(40);
             G.rings.push({ x: P.x, y: P.y, r: 20, max: R, t: 0, dur: 0.4, color: '255,140,60' });
+            fxq('dust', P.x, P.y, R); fxq('circle', P.x, P.y, { s0: R * U * 0.4, s1: R * U * 2.2, life: 0.5, color: '#ff8a3c' });
             burst(P.x, P.y, 0, 34, '#b58a5a', 420, true);
             for (const e of G.enemies) {
               if (!targetable(e)) continue;
@@ -1706,7 +1811,7 @@
         if (P.ghostT <= 0) {
           P.ghostT = D.blink ? 0.05 : 0.024;
           G.ghosts.push({ x: P.x, y: P.y, r: P.r, face: P.face, life: 0.24, max: 0.24, color: D.blink ? '140,145,170' : P.hero === 'ilan' ? '224,79,174' : '90,176,255' });
-          if (!D.blink && Math.random() < 0.5) burst(P.x, P.y, Math.atan2(-P.dashY, -P.dashX), 2, '#8a7e6a', 120);
+          if (!D.blink && Math.random() < 0.5) { burst(P.x, P.y, Math.atan2(-P.dashY, -P.dashX), 2, '#8a7e6a', 120); fxq('step', P.x, P.y); }
         }
         if (P.t >= T) {
           P.state = 'idle'; P.sinceDash = 0;
@@ -1764,6 +1869,12 @@
 
     P.x += P.vx * dt; P.y += P.vy * dt;
     collideWorld(P);
+    // passos (o ritmo acompanha a velocidade)
+    const spNow = len(P.vx, P.vy);
+    if ((P.state === 'idle' || P.state === 'guard' || P.state === 'drink') && spNow > 70 && P.z < 5) {
+      P.stepT = (P.stepT || 0) - dt * spNow / 235;
+      if (P.stepT <= 0) { P.stepT = 0.34; Sound.play('step'); if (Math.random() < 0.5) fxq('step', P.x, P.y); }
+    } else P.stepT = 0.1;
     fieldInteractions(dt);
   }
 
@@ -1816,7 +1927,8 @@
         pierce: c.pierce ? new Set() : null, homing: c.homing || (P.hero === 'aurel' ? 1.2 : 0), target: tgt, chill: c.chill, freeze: c.freeze, poise: (c.poise || 10) * P.mods.poise, kb: c.kb || 180,
         move: a.id, riposte: !!a.riposte, explode: c.explode });
     }
-    Sound.play(c.kind === 'ice' ? 'freeze' : 'fireball');
+    Sound.play(c.kind === 'ice' ? 'freeze' : 'bolt');
+    fxq('cast', P.x + Math.cos(P.face) * 20, P.y + Math.sin(P.face) * 20, c.kind === 'ice' ? '#9fe0ff' : c.kind === 'orb' ? '#ffe08a' : '#ff9a3c');
   }
   function castHeavy(HV) {
     const tgt = P.atkTarget && !P.atkTarget.dead ? P.atkTarget : null;
@@ -1827,6 +1939,7 @@
     }
     if (HV.frost) { // tomo: explosão de geada em volta
       G.rings.push({ x: P.x, y: P.y, r: 20, max: HV.radius, t: 0, dur: 0.4, color: '150,220,255' });
+      fxq('frost', P.x, P.y, HV.radius);
       burst(P.x, P.y, 0, 30, '#bfe8ff', 360, true); Sound.play('freeze');
       for (const e of G.enemies) {
         if (!targetable(e) || e.state === 'lurk' || len(e.x - P.x, e.y - P.y) > HV.radius + e.r) continue;
@@ -1872,6 +1985,7 @@
         addText(P.x, P.y - 40, 'A FIGUEIRA RESPONDE', '#6ef08a', 15);
         G.rings.push({ x: near.x, y: near.y, r: 10, max: 90, t: 0, dur: 0.5, color: '110,240,138' });
         burst(near.x, near.y, -Math.PI / 2, 24, '#6ef08a', 260, true);
+        fxq('heal', near.x, near.y); fxq('heal', P.x, P.y);
         Sound.play('font');
         storyEvent('font');
       }
@@ -1967,6 +2081,7 @@
       } else {
         P.vx = Math.cos(ang) * kb * 0.35; P.vy = Math.sin(ang) * kb * 0.35;
         burst(P.x + Math.cos(fromAng) * 16, P.y + Math.sin(fromAng) * 16, fromAng, 10, '#ffe2a0', 300);
+        fxq('sparks', P.x + Math.cos(fromAng) * 18, P.y + Math.sin(fromAng) * 18);
         Sound.play('clang'); hitstop(0.035, P, src.type ? src : null); shake(0.1);
         const chip = H_().armor ? 0 : dmg * 0.08;
         if (chip > 0) { P.hp -= chip; G.dmgTaken += chip; if (P.hp <= 0) playerDie(); }
@@ -2041,8 +2156,9 @@
       }
     }
     burst(x, y, 0, 22, '#ffe27a', 420, true);
+    fxq('parry', x, y);
     G.rings.push({ x, y, r: 6, max: 70, t: 0, dur: 0.25, color: '255,226,122' });
-    Sound.play('parry'); vibrate(25);
+    Sound.play('parry'); Sound.play('blade'); vibrate(25);
   }
 
   // ---------- Câmera cinematográfica (execuções, Artes, último golpe) ----------
@@ -2213,7 +2329,7 @@
           if (e.st <= 0) {
             setState(e, 'active', 0.14); e.hitDone = false;
             e.vx += Math.cos(e.face) * 320; e.vy += Math.sin(e.face) * 320;
-            Sound.play('eswing');
+            Sound.play('eswing', e.x, e.y);
           }
           return;
         case 'active':
@@ -2227,7 +2343,7 @@
           return;
         case 'rushWind':
           turnTo(e, a, 6, dt); want(e, 0, 0, 10);
-          if (e.st <= 0) { setState(e, 'rush', 0.36); e.hitDone = false; Sound.play('eswing'); }
+          if (e.st <= 0) { setState(e, 'rush', 0.36); e.hitDone = false; Sound.play('eswing', e.x, e.y); }
           return;
         case 'rush':
           want(e, Math.cos(e.face) * 430, Math.sin(e.face) * 430, 20);
@@ -2260,7 +2376,7 @@
         }
         case 'bashWind':
           turnTo(e, a, 3, dt); want(e, 0, 0, 10);
-          if (e.st <= 0) { setState(e, 'bash', 0.14); e.hitDone = false; e.vx += Math.cos(e.face) * 380; e.vy += Math.sin(e.face) * 380; Sound.play('eswing'); }
+          if (e.st <= 0) { setState(e, 'bash', 0.14); e.hitDone = false; e.vx += Math.cos(e.face) * 380; e.vy += Math.sin(e.face) * 380; Sound.play('eswing', e.x, e.y); }
           return;
         case 'bash': {
           const r = meleeCheck(e, 48, 1.6, 9, 520, true);
@@ -2271,7 +2387,7 @@
         }
         case 'windup':
           turnTo(e, a, 3.5, dt); want(e, 0, 0, 10);
-          if (e.st <= 0) { setState(e, 'active', 0.14); e.hitDone = false; Sound.play('eswing'); }
+          if (e.st <= 0) { setState(e, 'active', 0.14); e.hitDone = false; Sound.play('eswing', e.x, e.y); }
           return;
         case 'active':
           meleeCheck(e, 50, 1.8, 16, 360, true);
@@ -2334,7 +2450,7 @@
               P.state = 'grabbed'; P.t = 0; P.heldBy = e; P.actionId++; P.threat = null; P.atk = null; P.spec = null;
               setState(e, 'grabHold', 1.1 * (e.elite ? 1.2 : 1));
               addText(P.x, P.y - 36, 'AGARRADA! APERTE TUDO', '#ff5a6a', 15);
-              Sound.play('grab'); shake(0.3);
+              Sound.play('grab', e.x, e.y); shake(0.3);
               // "um segura, o outro ataca pelas costas"
               for (const o of G.enemies) if (o !== e && !o.dead && o.group === 'melee' && o.state === 'move' && len(o.x - P.x, o.y - P.y) < 300) { o.token = true; o.atkCd = 0; break; }
               return;
@@ -2356,7 +2472,7 @@
           return;
         case 'spinWind':
           want(e, 0, 0, 10);
-          if (e.st <= 0) { setState(e, 'spin', 0.42); e.hitDone = false; Sound.play('heavy'); }
+          if (e.st <= 0) { setState(e, 'spin', 0.42); e.hitDone = false; Sound.play('heavy', e.x, e.y); }
           return;
         case 'spin':
           e.face += dt * 16;
@@ -2367,7 +2483,7 @@
         case 'chargeWind':
           turnTo(e, a, 3.5, dt);
           want(e, 0, 0, 10);
-          if (e.st <= 0) { setState(e, 'charge', 0.75); e.hitDone = false; e.chargeHit = new Set(); Sound.play('heavy'); }
+          if (e.st <= 0) { setState(e, 'charge', 0.75); e.hitDone = false; e.chargeHit = new Set(); Sound.play('heavy', e.x, e.y); }
           return;
         case 'charge': {
           const sp = e.elite ? 640 : 560;
@@ -2428,7 +2544,7 @@
             const tt = d / 700;
             const ang = Math.atan2(P.y + P.vy * tt - e.y, P.x + P.vx * tt - e.x) + habitSide() * 0.12;
             G.projectiles.push({ kind: 'eknife', x: e.x + Math.cos(ang) * (e.r + 6), y: e.y + Math.sin(ang) * (e.r + 6), px: e.x, py: e.y, vx: Math.cos(ang) * 700, vy: Math.sin(ang) * 700, r: 4, dmg: 8, life: 1.2, friendly: false, owner: e, dead: false });
-            Sound.play('throw');
+            Sound.play('throw', e.x, e.y);
             setState(e, 'recover', 0.3);
           }
           return;
@@ -2438,7 +2554,7 @@
           if (e.st <= 0) {
             setState(e, 'active', 0.12); e.hitDone = false;
             e.vx = Math.cos(e.face) * 470; e.vy = Math.sin(e.face) * 470;
-            Sound.play('eswing');
+            Sound.play('eswing', e.x, e.y);
           }
           return;
         case 'active':
@@ -2485,7 +2601,7 @@
           navSeek(e, tx, ty, e.speed, 40);
           if (e.atkCd > 0) return;
           const corpse = G.corpses.find((c) => !c.final && c.enc === e.enc && G.time - c.t < 12 && len(c.x - e.x, c.y - e.y) < 520);
-          if (corpse && (e.cd.raise || 0) <= 0) { e.raiseC = corpse; corpse.final = true; setState(e, 'raiseWind', 1.5 * e.tempo); e.cd.raise = e.mini ? 4 : 6; Sound.play('beep'); return; }
+          if (corpse && (e.cd.raise || 0) <= 0) { e.raiseC = corpse; corpse.final = true; setState(e, 'raiseWind', 1.5 * e.tempo); e.cd.raise = e.mini ? 4 : 6; Sound.play('beep', e.x, e.y); return; }
           const ward = allies.find((o) => !o.ward && len(o.x - e.x, o.y - e.y) < 420);
           if (ward && (e.cd.ward || 0) <= 0) { e.wardT = ward; setState(e, 'wardWind', 0.8); e.cd.ward = 7; return; }
           if (d > 160 && d < 480 && hasLOS(e.x, e.y, P.x, P.y, 6) && seesPlayer(e) && (e.cd.bolt || 0) <= 0) { e.cd.bolt = 2.6; setState(e, 'castWind', 0.6 * e.tempo); }
@@ -2497,6 +2613,7 @@
           if (c) { turnTo(e, Math.atan2(c.y - e.y, c.x - e.x), 6, dt); if (Math.random() < 0.3) burst(c.x, c.y, -Math.PI / 2, 1, '#8fd3ff', 120); }
           if (e.st <= 0) {
             if (c) {
+              Sound.play('raise', c.x, c.y); fxq('raise', c.x, c.y);
               const m = makeEnemy(c.type, c.x, c.y, false);
               m.enc = e.enc; m.hp = Math.round(m.maxHp * 0.6); m.raised = true;
               setState(m, 'spawn', 1.2);
@@ -2563,7 +2680,7 @@
           seekTo(e, P.x + Math.cos(e.orbit) * R, P.y + Math.sin(e.orbit) * R, e.speed, 40);
           turnTo(e, a, 6, dt);
           if (e.token && e.atkCd <= 0 && d < 330 && seesPlayer(e) && hasLOS(e.x, e.y, P.x, P.y, 2, true)) {
-            setState(e, 'mark', 0.55 * e.tempo); Sound.play('beep');
+            setState(e, 'mark', 0.55 * e.tempo); Sound.play('beep', e.x, e.y);
             // parceira do outro lado marca junto (mergulho em tesoura)
             const mate = G.enemies.find((o) => o !== e && o.type === 'drone' && !o.dead && o.state === 'move' && o.token && o.atkCd <= 0 && Math.abs(angDiff(Math.atan2(o.y - P.y, o.x - P.x), Math.atan2(e.y - P.y, e.x - P.x))) > 1.8);
             if (mate) setState(mate, 'mark', 0.55 * mate.tempo);
@@ -2625,7 +2742,7 @@
         }
         case 'staffWind':
           turnTo(e, a, 4, dt); want(e, 0, 0, 10);
-          if (e.st <= 0) { setState(e, 'staff', 0.16); e.hitDone = false; e.vx += Math.cos(e.face) * 360; e.vy += Math.sin(e.face) * 360; Sound.play('eswing'); }
+          if (e.st <= 0) { setState(e, 'staff', 0.16); e.hitDone = false; e.vx += Math.cos(e.face) * 360; e.vy += Math.sin(e.face) * 360; Sound.play('eswing', e.x, e.y); }
           return;
         case 'staff':
           meleeCheck(e, 70, 2.0, 18, 420, true);
@@ -2723,8 +2840,9 @@
 
   function bossSlam(e) {
     const cx = e.x + Math.cos(e.face) * 40, cy = e.y + Math.sin(e.face) * 40, R = 120;
-    shake(0.6); Sound.play('slam'); vibrate(35);
+    shake(0.6); Sound.play('slam', e.x, e.y); vibrate(35);
     G.rings.push({ x: cx, y: cy, r: 10, max: R + 10, t: 0, dur: 0.35, color: '255,120,60' });
+    fxq('dust', cx, cy, R); fxq('fire', cx, cy);
     burst(cx, cy, 0, 26, '#ff7a3c', 320, true);
     if (len(P.x - cx, P.y - cy) < R + P.r) hurtPlayer(e, 26, Math.atan2(P.y - cy, P.x - cx), 640, false, { unblockable: true });
   }
@@ -2796,7 +2914,7 @@
             const tx = P.x + P.vx * lead + (i ? rand(-70, 70) : 0), ty = P.y + P.vy * lead + (i ? rand(-70, 70) : 0);
             launchLob(e, tx, ty, { dmg: 18, radius: 70, pool: 0, dur: clamp(d / 600, 0.7, 1.2) + i * 0.12, bomb: true });
           }
-          Sound.play('throw');
+          Sound.play('throw', e.x, e.y);
           setState(e, 'reload', 1.3 * e.tempo); e.hideC = pickHidePos(e);
         }
         return;
@@ -2844,9 +2962,9 @@
       dmg: kind === 'bullet' ? 18 : kind === 'fire' ? 12 : kind === 'soul' ? 10 : 10, life: 2.4, friendly: false, owner: e, dead: false,
       homing: kind === 'soul' ? 1.2 : 0, target: kind === 'soul' ? P : null,
     });
-    if (kind === 'bullet') { Sound.play('gun'); burst(e.x + Math.cos(a) * (e.r + 12), e.y + Math.sin(a) * (e.r + 12), a, 8, '#ffd27a', 260); shake(0.05); }
-    else if (kind === 'fire' || kind === 'soul') Sound.play('fireball');
-    else Sound.play('shoot');
+    if (kind === 'bullet') { Sound.play('gun', e.x, e.y); burst(e.x + Math.cos(a) * (e.r + 12), e.y + Math.sin(a) * (e.r + 12), a, 8, '#ffd27a', 260); shake(0.05); }
+    else if (kind === 'fire' || kind === 'soul') Sound.play('fireball', e.x, e.y);
+    else Sound.play('shoot', e.x, e.y);
   }
   // Projétil em arco (Bombarda / chuva do chefe / granadas): passa por cima da cobertura
   function launchLob(src, tx, ty, o) {
@@ -2854,7 +2972,7 @@
     G.lobs.push({ sx: src.x, sy: src.y, tx, ty, x: src.x, y: src.y, h: 60, t: 0,
       dur: o.dur || clamp(dist / 650, 0.75, 1.4), peak: 140 + dist * 0.15,
       dmg: o.dmg, radius: o.radius, pool: o.pool, poolT: o.poolT, owner: src, bomb: !!o.bomb, friendly: !!o.friendly });
-    if (!o.bomb) Sound.play('lob');
+    if (!o.bomb) Sound.play('lob', src.x, src.y);
   }
   function addHazard(x, y, r, t) {
     HAZ.push({ c: 1, x, y, r, t, max: t, cool: 0 });
@@ -2864,9 +2982,10 @@
   function explode(x, y, R, dmg, o) {
     o = o || {};
     G.rings.push({ x, y, r: 10, max: R + 10, t: 0, dur: 0.32, color: o.color || '255,150,60' });
+    fxq('boom', x, y, R);
     burst(x, y, 0, 26, '#ffb03c', 380, true);
     burst(x, y, -Math.PI / 2, 12, '#5a5048', 220, true);
-    Sound.play('boom'); shake(o.small ? 0.2 : 0.4); vibrate(20);
+    Sound.play('boom', x, y); shake(o.small ? 0.2 : 0.4); vibrate(20);
     if (o.hurtsPlayer && P.state !== 'dead' && len(P.x - x, P.y - y) < R + P.r) hurtPlayer({ x, y }, o.pdmg || dmg * 0.6, Math.atan2(P.y - y, P.x - x), 420, false, { unblockable: true });
     for (const e of G.enemies) {
       if (!targetable(e) || e === o.owner || (e.boss && o.fromEnemy)) continue;
@@ -2891,6 +3010,7 @@
         continue;
       }
       G.rings.push({ x: l.tx, y: l.ty, r: 10, max: l.radius + 10, t: 0, dur: 0.3, color: '255,110,40' });
+      fxq('lavahit', l.tx, l.ty);
       burst(l.tx, l.ty, 0, 22, '#ff7a2a', 340, true);
       Sound.play('slam'); shake(0.15);
       if (P.state !== 'dead' && len(P.x - l.tx, P.y - l.ty) < l.radius + P.r) hurtPlayer(l.owner || { x: l.tx, y: l.ty }, l.dmg * lavaMult(), Math.atan2(P.y - l.ty, P.x - l.tx), 300, false, { unblockable: true });
@@ -2923,7 +3043,7 @@
     setState(e, 'thrown', toLava ? 0.35 : 0.55);
     e.vx = Math.cos(ang) * speed; e.vy = Math.sin(ang) * speed; e.z = 30; e.vz = 200;
     e.thrownHit = new Set(); e.toLava = !!toLava; e.token = false;
-    Sound.play('throw');
+    Sound.play('throw', e.x, e.y);
   }
   // Bombarda tomada: por 8 s atira nos inimigos, depois explode
   function captureCannon(e) {
@@ -2961,7 +3081,7 @@
     if (e.state !== 'lurk') return;
     e.token = false;
     if (e.role === 'bait') e.role = null;
-    if (e.buried) { e.buried = false; setState(e, 'spawn', 0.9 + Math.random() * 0.7); }
+    if (e.buried) { e.buried = false; setState(e, 'spawn', 0.9 + Math.random() * 0.7); Sound.play('rise', e.x, e.y); }
     else if (e.role === 'drop') setState(e, 'spawn', 0.8);
     else setState(e, 'move', 0);
   }
@@ -3038,8 +3158,9 @@
   function bruteSlam(e) {
     const cx = e.x + Math.cos(e.face) * 38, cy = e.y + Math.sin(e.face) * 38;
     const R = 92;
-    shake(0.55); Sound.play('slam'); vibrate(30);
+    shake(0.55); Sound.play('slam', e.x, e.y); vibrate(30);
     G.rings.push({ x: cx, y: cy, r: 10, max: R + 10, t: 0, dur: 0.3, color: '255,154,60' });
+    fxq('dust', cx, cy, R);
     burst(cx, cy, 0, 22, '#b58a5a', 300, true);
     if (len(P.x - cx, P.y - cy) < R + P.r) hurtPlayer(e, 30, Math.atan2(P.y - cy, P.x - cx), 620, false, { unblockable: true });
     for (const o of G.enemies) {
@@ -3062,6 +3183,7 @@
           const hard = e.slammed;
           setState(e, 'down', hard ? 1.1 : 0.55); e.slammed = false;
           burst(e.x, e.y, 0, hard ? 16 : 8, '#8a7e6a', hard ? 260 : 160, true);
+          fxq('dust', e.x, e.y, hard ? 70 : 40);
           if (hard) { shake(0.25); Sound.play('slam'); damageEnemy(e, 6, 0, 0, 0, { fromEnemy: true, src: null, stop: 0.001, env: true }); }
         }
         return;
@@ -3288,6 +3410,7 @@
       if (frontal) {
         e.blockN++;
         burst(e.x - Math.cos(ang) * e.r, e.y - Math.sin(ang) * e.r, ang + Math.PI, 10, '#ffe2a0', 280);
+        fxq('sparks', e.x - Math.cos(ang) * e.r, e.y - Math.sin(ang) * e.r);
         Sound.play('clang'); hitstop(0.05, e, P);
         addText(e.x, e.y - e.r - 12, 'BLOQUEADO', '#c9d2e4', 13);
         e.vx += Math.cos(ang) * 120; e.vy += Math.sin(ang) * 120;
@@ -3342,8 +3465,11 @@
     hitstop(o.stop || 0.04, e, o.src === undefined ? P : o.src);
     if (o.finisher || o.heavy) shake(0.22); else shake(0.08);
     burst(e.x, e.y, ang, crit ? 14 : 8, crit ? '#ffe27a' : e.color, crit ? 380 : 300);
+    fxq(TYPES[e.type].undead ? 'bone' : 'hit', e.x - Math.cos(ang) * e.r * 0.5, e.y - Math.sin(ang) * e.r * 0.5);
+    if (crit) fxq('hit', e.x, e.y, '#ffe27a');
     addText(e.x + rand(-8, 8), e.y - e.r - 10, crit ? dmg + '!' : String(dmg), crit ? '#ffe27a' : '#ffffff', crit ? 19 : 14);
-    Sound.play(crit || o.finisher || o.heavy ? 'crit' : 'hit');
+    Sound.play(crit || o.finisher || o.heavy ? 'crit' : TYPES[e.type].undead ? 'bone' : 'hit', e.x, e.y);
+    if ((crit || o.heavy) && TYPES[e.type].undead) Sound.play('bone', e.x, e.y);
     if (o.lava) { if (e.hp <= 0) { e.lavaKill = true; killEnemy(e, ang); } return true; }
     if (fromP) {
       if (!o.supreme) addRage(dmg * 0.32 * (P.mods.rageGain || 1));
@@ -3370,7 +3496,7 @@
     addText(e.x, e.y - e.r - 26, '+' + pts, '#9fe870', 13);
     burst(e.x, e.y, ang, e.r > 20 ? 34 : 22, e.color, 360, true);
     G.rings.push({ x: e.x, y: e.y, r: e.r, max: e.r + 40, t: 0, dur: 0.3, color: '255,255,255' });
-    Sound.play('die');
+    Sound.play(TYPES[e.type].undead ? 'bone' : 'die', e.x, e.y); Sound.play('die', e.x, e.y);
     if (e.r > 20) shake(0.4);
     styleAdd(e.envKill || e.lavaKill ? 70 : 25, e.envKill || e.lavaKill ? 'ambiente' : null);
     const chance = e.type === 'brute' || e.type === 'cannon' ? 0.7 : e.type === 'drone' ? 0.1 : 0.2;
@@ -3952,6 +4078,8 @@
   // =========================================================================
   // Efeitos
   // =========================================================================
+  // efeito com textura (desenhado pelo renderizador): fxq('boom', x, y, raio)
+  function fxq(kind, x, y, a) { if (!G.fxq) G.fxq = []; if (G.fxq.length < 300) G.fxq.push([kind, x, y, a]); }
   function burst(x, y, ang, n, color, speed, omni) {
     for (let i = 0; i < n; i++) {
       if (G.particles.length > 700) G.particles.shift();
@@ -4085,6 +4213,7 @@
     scene.environment = pm.fromScene(es, 0.03).texture;
     pm.dispose();
   })();
+  const BASE_ENV = scene.environment; // reserva procedural (sem HDRI)
   const hemi = new THREE.HemisphereLight('#8fa2d8', '#3a2a20', 0.7);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight('#ffd6a8', 2.0);
@@ -4766,7 +4895,7 @@
   const ASSET_BASE = 'assets/';
   // Página autocontida: modelos (JSON) e texturas (data URI) podem vir embutidos em window.__ASSETS
   const EMBED = window.__ASSETS || null;
-  const BUILD = 'build 7 · heróis e armas';
+  const BUILD = 'build 8 · trilha e gráficos';
   // Todas as animações vêm de UMA biblioteca (anims.glb): os KayKit usam o mesmo esqueleto.
   // show: peças de arma visíveis no modelo (as outras ficam escondidas) · tint: cor multiplicada
   const ANIM_FILE = 'anims.glb';
@@ -5615,6 +5744,199 @@
     g.add(core, glow); g.userData.core = core; g.userData.glow = glow;
     return g;
   });
+  // =========================================================================
+  // Recursos de alta qualidade: HDRI (Poly Haven, CC0) e partículas com textura (Kenney, CC0)
+  // =========================================================================
+  function assetBuffer(path) {
+    if (EMBED && EMBED[path]) { const bin = atob(EMBED[path]), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return Promise.resolve(u8.buffer); }
+    if (location.protocol === 'file:') return Promise.reject(new Error('file://'));
+    return fetch(ASSET_BASE + path).then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
+  }
+  // Iluminação por imagem: um lugar real para cada capítulo (reflexos em metal, sombra suave de ambiente)
+  const MOOD_HDR = { stone: 'castle_zavelstein_cellar', dusk: 'evening_museum_courtyard', lava: 'industrial_workshop_foundry', dark: 'abandoned_workshop_02', hall: 'afrikaans_church_interior', trial: 'drachenfels_cellar' };
+  const MOOD_IBL = { stone: 0.55, dusk: 0.5, lava: 0.42, dark: 0.4, hall: 0.5, trial: 0.55 };
+  const envCache = {};
+  let pmremGen = null, envWant = null;
+  function applyIBL(key) {
+    envWant = key;
+    if (!Q || !Q.ibl || !EX.RGBELoader) { scene.environment = BASE_ENV; return; }
+    const file = MOOD_HDR[key] || MOOD_HDR.stone;
+    if (envCache[file] && envCache[file] !== 'loading') { scene.environment = envCache[file]; return; }
+    scene.environment = BASE_ENV;
+    if (envCache[file] === 'loading') return;
+    envCache[file] = 'loading';
+    assetBuffer('env/' + file + '.hdr').then((ab) => {
+      const L = new EX.RGBELoader(); L.setDataType(THREE.FloatType);
+      const d = L.parse(ab), k = MOOD_IBL[key] || 0.5;
+      for (let i = 0; i < d.data.length; i++) d.data[i] *= k;
+      const tex = new THREE.DataTexture(d.data, d.width, d.height, THREE.RGBAFormat, THREE.FloatType);
+      tex.mapping = THREE.EquirectangularReflectionMapping; tex.colorSpace = THREE.LinearSRGBColorSpace;
+      tex.flipY = true; tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.generateMipmaps = false; tex.needsUpdate = true;
+      pmremGen = pmremGen || new THREE.PMREMGenerator(renderer);
+      const env = pmremGen.fromEquirectangular(tex).texture;
+      tex.dispose();
+      envCache[file] = env;
+      if (Q.ibl && (MOOD_HDR[envWant] || MOOD_HDR.stone) === file) scene.environment = env;
+    }).catch((err) => { envCache[file] = null; console.warn('HDRI indisponível', file, err && err.message); });
+  }
+
+  // ---------- Partículas com textura: fumaça, poeira, faíscas, brilho, chamas, círculos mágicos, marcas no chão ----------
+  const FXTEX = {};
+  function fxTex(name) {
+    if (FXTEX[name]) return FXTEX[name];
+    const t = new THREE.Texture();
+    t.colorSpace = THREE.SRGBColorSpace;
+    const img = new Image();
+    img.onload = () => { t.image = img; t.needsUpdate = true; t.ok = true; };
+    const key = 'fx/' + name + '.png';
+    img.src = EMBED && EMBED[key] ? 'data:image/png;base64,' + EMBED[key] : ASSET_BASE + key;
+    return (FXTEX[name] = t);
+  }
+  const FX_MAX = 700;
+  const FX_VERT = `
+    attribute vec3 iPos; attribute vec4 iData; attribute vec3 iColor;
+    varying vec2 vUv; varying float vA; varying vec3 vC;
+    void main() {
+      vUv = uv; vA = iData.y; vC = iColor;
+      float c = cos(iData.z), s = sin(iData.z);
+      vec2 q = vec2(c * position.x - s * position.y, s * position.x + c * position.y) * iData.x;
+      vec3 wp;
+      if (iData.w > 0.5) wp = iPos + vec3(q.x, 0.0, q.y);
+      else {
+        vec3 r = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
+        vec3 u = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+        wp = iPos + r * q.x + u * q.y;
+      }
+      gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
+    }`;
+  const FX_FRAG = `
+    uniform sampler2D map; varying vec2 vUv; varying float vA; varying vec3 vC;
+    void main() {
+      vec4 t = texture2D(map, vUv);
+      float a = t.a * vA;
+      if (a < 0.004) discard;
+      gl_FragColor = vec4(vC * t.rgb, a);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`;
+  function fxSystem(texName, additive, order) {
+    const base = new THREE.PlaneGeometry(1, 1);
+    const g = new THREE.InstancedBufferGeometry();
+    g.index = base.index; g.setAttribute('position', base.attributes.position); g.setAttribute('uv', base.attributes.uv);
+    const pos = new Float32Array(FX_MAX * 3), dat = new Float32Array(FX_MAX * 4), col = new Float32Array(FX_MAX * 3);
+    const aP = new THREE.InstancedBufferAttribute(pos, 3), aD = new THREE.InstancedBufferAttribute(dat, 4), aC = new THREE.InstancedBufferAttribute(col, 3);
+    for (const a of [aP, aD, aC]) a.setUsage(THREE.DynamicDrawUsage);
+    g.setAttribute('iPos', aP); g.setAttribute('iData', aD); g.setAttribute('iColor', aC);
+    g.instanceCount = 0;
+    const tex = fxTex(texName);
+    const m = new THREE.ShaderMaterial({ uniforms: { map: { value: tex } }, vertexShader: FX_VERT, fragmentShader: FX_FRAG, transparent: true, depthWrite: false,
+      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending, toneMapped: true });
+    const mesh = new THREE.Mesh(g, m);
+    mesh.frustumCulled = false; mesh.renderOrder = order || 6; mesh.visible = false;
+    scene.add(mesh);
+    return { mesh, g, pos, dat, col, aP, aD, aC, list: [], tex };
+  }
+  const FXS = {
+    scorch: fxSystem('scorch', false, 3), magic: fxSystem('magic2', true, 4), smoke: fxSystem('smoke', false, 7), dust: fxSystem('dirt', false, 6),
+    spark: fxSystem('spark', true, 8), flash: fxSystem('light', true, 9), flame: fxSystem('flame2', true, 8), star: fxSystem('star', true, 8), ash: fxSystem('star', false, 5),
+  };
+  const _fc = new THREE.Color();
+  // x, y em px da simulação; h em unidades 3D
+  function fxAdd(sys, o) {
+    const S = FXS[sys];
+    if (!S || S.list.length >= FX_MAX) return;
+    const k = Q ? (Q.fx || 1) : 1;
+    if (k < 1 && sys !== 'scorch' && sys !== 'magic' && Math.random() > k) return;
+    _fc.set(o.color || '#ffffff');
+    S.list.push({ x: o.x * U, y: o.h || 0, z: o.y * U, vx: o.vx || 0, vy: o.vy || 0, vz: o.vz || 0, s0: o.s0 || 0.5, s1: o.s1 === undefined ? o.s0 || 0.5 : o.s1,
+      a0: o.a === undefined ? 1 : o.a, life: 0, max: o.life || 0.6, rot: o.rot === undefined ? Math.random() * TAU : o.rot, vr: o.vr || 0,
+      r: _fc.r, g: _fc.g, b: _fc.b, flat: o.flat ? 1 : 0, drag: o.drag || 0, grav: o.grav || 0, fadeIn: o.fadeIn || 0 });
+  }
+  const R_ = (a, b) => a + Math.random() * (b - a);
+  // efeitos prontos, disparados pela simulação (G.fxq) ou pelo próprio desenho
+  const FX = {
+    boom(x, y, a) {
+      const R = (a || 90) / 90;
+      fxAdd('flash', { x, y, h: 0.8, s0: 3.2 * R, s1: 5 * R, life: 0.22, color: '#ffb060' });
+      for (let i = 0; i < 12; i++) { const an = Math.random() * TAU, sp = R_(0.5, 2.4) * R; fxAdd('smoke', { x, y, h: R_(0.3, 1.2), vx: Math.cos(an) * sp, vz: Math.sin(an) * sp, vy: R_(0.6, 1.6), s0: R_(1.0, 1.6) * R, s1: R_(2.6, 3.8) * R, life: R_(1.2, 2.1), a: 0.5, color: i < 4 ? '#b08a68' : '#8a827c', drag: 1.8, vr: R_(-0.6, 0.6) }); }
+      for (let i = 0; i < 18; i++) { const an = Math.random() * TAU, sp = R_(4, 11) * R; fxAdd('spark', { x, y, h: 0.5, vx: Math.cos(an) * sp, vz: Math.sin(an) * sp, vy: R_(2, 7), s0: 0.35, s1: 0.1, life: R_(0.35, 0.8), color: '#ffc070', drag: 1.5, grav: 12 }); }
+      for (let i = 0; i < 6; i++) fxAdd('flame', { x: x + R_(-30, 30) * R, y: y + R_(-30, 30) * R, h: R_(0.2, 0.8), vy: R_(1, 2.5), s0: R_(0.8, 1.4) * R, s1: 0.2, life: R_(0.35, 0.6), color: '#ff8a3a' });
+      fxAdd('scorch', { x, y, h: 0.035, s0: 3.2 * R, life: 9, a: 0.85, color: '#1a1410', flat: true, fadeIn: 0.05 });
+    },
+    dust(x, y, a) { const R = (a || 60) / 60; for (let i = 0; i < 10; i++) { const an = i / 10 * TAU + R_(-0.2, 0.2), sp = R_(1.5, 3.5) * R; fxAdd('dust', { x, y, h: 0.15, vx: Math.cos(an) * sp, vz: Math.sin(an) * sp, vy: R_(0.3, 1), s0: 0.6 * R, s1: 1.8 * R, life: R_(0.5, 0.9), a: 0.55, color: '#8a7a66', drag: 3 }); } },
+    step(x, y) { fxAdd('dust', { x, y, h: 0.08, vy: 0.4, s0: 0.3, s1: 0.8, life: 0.45, a: 0.35, color: '#8a7a66', drag: 3 }); },
+    sparks(x, y, a) { const h = a || 1.1; fxAdd('flash', { x, y, h, s0: 0.9, s1: 1.4, life: 0.12, color: '#ffe6b0' }); for (let i = 0; i < 12; i++) { const an = Math.random() * TAU, sp = R_(3, 8); fxAdd('spark', { x, y, h, vx: Math.cos(an) * sp, vz: Math.sin(an) * sp, vy: R_(1, 5), s0: 0.22, s1: 0.05, life: R_(0.2, 0.45), color: '#ffe08a', drag: 2, grav: 14 }); } },
+    parry(x, y) { fxAdd('star', { x, y, h: 1.2, s0: 1.2, s1: 3.2, life: 0.3, color: '#ffe27a', vr: 4 }); fxAdd('flash', { x, y, h: 1.2, s0: 2, s1: 3, life: 0.18, color: '#fff2c0' }); FX.sparks(x, y, 1.2); },
+    hit(x, y, a) { fxAdd('flash', { x, y, h: 1.0, s0: 0.7, s1: 1.1, life: 0.1, color: a || '#ffffff', a: 0.7 }); },
+    bone(x, y) { for (let i = 0; i < 5; i++) { const an = Math.random() * TAU; fxAdd('dust', { x, y, h: R_(0.4, 1.2), vx: Math.cos(an) * 1.5, vz: Math.sin(an) * 1.5, vy: R_(0, 1.5), s0: 0.35, s1: 0.9, life: 0.5, a: 0.5, color: '#d8d0c0', drag: 2, grav: 2 }); } },
+    circle(x, y, a) { const o = a || {}; fxAdd('magic', { x, y, h: 0.05, s0: o.s0 || 2, s1: o.s1 || o.s0 || 2.4, life: o.life || 1, color: o.color || '#ff9a3c', flat: true, vr: o.vr || 1.5, fadeIn: 0.1, a: o.a || 0.9 }); },
+    cast(x, y, c) { fxAdd('flash', { x, y, h: 1.2, s0: 0.8, s1: 1.4, life: 0.14, color: c || '#ffb04a' }); FX.circle(x, y, { s0: 1.2, s1: 1.6, life: 0.45, color: c || '#ffb04a', a: 0.6 }); },
+    frost(x, y, a) { const R = (a || 170) / 170; FX.circle(x, y, { s0: 3 * R, s1: 9 * R, life: 0.7, color: '#9fe0ff' }); for (let i = 0; i < 24; i++) { const an = Math.random() * TAU, sp = R_(2, 7) * R; fxAdd('star', { x, y, h: R_(0.2, 1.5), vx: Math.cos(an) * sp, vz: Math.sin(an) * sp, vy: R_(0, 2), s0: 0.3, s1: 0.1, life: R_(0.5, 1), color: '#cfefff', drag: 2 }); } },
+    heal(x, y) { for (let i = 0; i < 14; i++) fxAdd('star', { x: x + R_(-24, 24), y: y + R_(-24, 24), h: R_(0.2, 1), vy: R_(1, 2.5), s0: 0.25, s1: 0.05, life: R_(0.7, 1.3), color: '#7dffa0' }); },
+    fire(x, y) { for (let i = 0; i < 3; i++) fxAdd('flame', { x: x + R_(-10, 10), y: y + R_(-10, 10), h: R_(0.1, 0.5), vy: R_(1, 2), s0: R_(0.4, 0.8), s1: 0.1, life: R_(0.3, 0.55), color: '#ff7a2a' }); },
+    ember(x, y) { fxAdd('flame', { x, y, h: 0.05, vx: R_(-0.3, 0.3), vz: R_(-0.3, 0.3), vy: R_(0.8, 2.2), s0: R_(0.25, 0.5), s1: 0.05, life: R_(0.8, 1.6), color: '#ff8a3a' }); },
+    supreme(x, y) { FX.circle(x, y, { s0: 3, s1: 6, life: 1.6, color: '#ff7a3c', vr: 2 }); FX.circle(x, y, { s0: 1.5, s1: 3, life: 1.2, color: '#ffe0a0', vr: -3 }); },
+    raise(x, y) { FX.circle(x, y, { s0: 1.4, s1: 2.2, life: 1.4, color: '#8fd3ff', vr: 2 }); for (let i = 0; i < 10; i++) fxAdd('star', { x: x + R_(-20, 20), y: y + R_(-20, 20), h: R_(0, 0.5), vy: R_(1, 2), s0: 0.2, s1: 0.05, life: 1, color: '#bfe8ff' }); },
+    lavahit(x, y) { for (let i = 0; i < 6; i++) FX.fire(x + R_(-40, 40), y + R_(-40, 40)); for (let i = 0; i < 5; i++) fxAdd('smoke', { x, y, h: 0.4, vy: R_(0.6, 1.4), vx: R_(-1, 1), vz: R_(-1, 1), s0: 1.2, s1: 2.6, life: 1.4, a: 0.5, color: '#3a2a22', drag: 1.5 }); fxAdd('scorch', { x, y, h: 0.035, s0: 2.6, life: 6, a: 0.6, color: '#1a1410', flat: true }); },
+  };
+  let ashInit = false;
+  function updateFxSystems(rdt, tx, tz) {
+    const fdt = rdt * (G.slowT > 0 ? G.slowScale : 1);
+    // fila vinda da simulação
+    if (G.fxq && G.fxq.length) { for (const q of G.fxq) { const f = FX[q[0]]; if (f) f(q[1], q[2], q[3]); } G.fxq.length = 0; }
+    // lava viva: brasas subindo das poças (mais em qualidade alta)
+    if (G.state === 'play' || G.state === 'menu') for (const h of HAZ) {
+      if (h.cool > 0) continue;
+      const area = h.b ? h.w * h.h : Math.PI * h.r * h.r;
+      const rate = area / 9000 * (Q ? Q.fx || 1 : 1) * fdt;
+      if (Math.random() < rate) FX.ember(h.b ? h.x + R_(-h.w / 2, h.w / 2) : h.x + R_(-h.r, h.r) * 0.7, h.b ? h.y + R_(-h.h / 2, h.h / 2) : h.y + R_(-h.r, h.r) * 0.7);
+    }
+    // cinzas no ar: flutuam em volta da câmera (o nome da campanha, literalmente)
+    const A = FXS.ash, want = Q ? Q.ash || 0 : 0;
+    if (want && (!ashInit || A.list.length !== want)) {
+      A.list.length = 0; ashInit = true;
+      const lavaish = moodKey === 'lava';
+      for (let i = 0; i < want; i++) A.list.push({ x: tx + R_(-16, 16), y: R_(0.2, 7), z: tz + R_(-16, 16), vx: R_(-0.15, 0.15), vy: R_(-0.12, 0.05), vz: R_(-0.15, 0.15), s0: R_(0.025, 0.06), s1: 0, a0: R_(0.15, 0.4), life: 0, max: 1e9, rot: 0, vr: R_(-1, 1),
+        r: lavaish ? 1 : 0.55, g: lavaish ? 0.5 : 0.52, b: lavaish ? 0.28 : 0.5, flat: 0, drag: 0, grav: 0, fadeIn: 0, ash: true });
+    }
+    if (!want) A.list.length = 0;
+    for (const sys in FXS) {
+      const S = FXS[sys], L = S.list;
+      let n = 0;
+      for (let i = 0; i < L.length; i++) {
+        const p = L[i];
+        if (p.ash) {
+          p.x += (p.vx + Math.sin(realT * 0.3 + i) * 0.08) * fdt; p.y += p.vy * fdt; p.z += p.vz * fdt; p.rot += p.vr * fdt;
+          if (p.x < tx - 16) p.x += 32; else if (p.x > tx + 16) p.x -= 32;
+          if (p.z < tz - 16) p.z += 32; else if (p.z > tz + 16) p.z -= 32;
+          if (p.y < 0.1) p.y += 7; else if (p.y > 7.2) p.y -= 7;
+        } else {
+          p.life += fdt;
+          if (p.life >= p.max) continue;
+          const dk = p.drag ? Math.exp(-p.drag * fdt) : 1;
+          p.vx *= dk; p.vz *= dk; p.vy = p.vy * dk - p.grav * fdt;
+          p.x += p.vx * fdt; p.y += p.vy * fdt; p.z += p.vz * fdt; p.rot += p.vr * fdt;
+          if (p.y < 0.02 && p.grav) { p.y = 0.02; p.vy *= -0.3; }
+        }
+        L[n++] = p;
+        if (n > FX_MAX) break;
+      }
+      L.length = Math.min(n, FX_MAX);
+      const cnt = L.length;
+      for (let i = 0; i < cnt; i++) {
+        const p = L[i], f = p.ash ? 0.5 : p.life / p.max;
+        S.pos[i * 3] = p.x; S.pos[i * 3 + 1] = p.y; S.pos[i * 3 + 2] = p.z;
+        const fade = p.ash ? p.a0 : p.a0 * (1 - f) * (p.fadeIn ? Math.min(1, p.life / p.fadeIn) : 1) * (sys === 'scorch' ? Math.min(1, (1 - f) * 4) : 1);
+        S.dat[i * 4] = p.ash ? p.s0 : lerp(p.s0, p.s1, sys === 'smoke' ? Math.sqrt(f) : f); S.dat[i * 4 + 1] = fade; S.dat[i * 4 + 2] = p.rot; S.dat[i * 4 + 3] = p.flat;
+        S.col[i * 3] = p.r; S.col[i * 3 + 1] = p.g; S.col[i * 3 + 2] = p.b;
+      }
+      S.g.instanceCount = cnt;
+      S.mesh.visible = cnt > 0 && !!S.tex.ok;
+      if (cnt) { S.aP.needsUpdate = true; S.aD.needsUpdate = true; S.aC.needsUpdate = true; }
+    }
+  }
+  function clearFx() { for (const k in FXS) FXS[k].list.length = 0; ashInit = false; }
+
   // ---------- Câmera / picking ----------
   const _ray = new THREE.Raycaster();
   const _aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.9);
@@ -5660,7 +5982,8 @@
     if (document.hidden || PERF.cool > 0) return;
     if (PERF.fps < 52) {
       PERF.dropped = true;
-      if (PERF.tier >= 3 && PERF.fps < 45) { setTier(2); PERF.cool = 1; } // o bloom é o primeiro a sair
+      if (PERF.tier >= 4 && PERF.fps < 50) { setTier(3); PERF.cool = 1; } // a oclusão de ambiente é a primeira a sair
+      else if (PERF.tier >= 3 && PERF.fps < 45) { setTier(2); PERF.cool = 1; } // depois o bloom
       else if (PERF.scale > PERF.minScale + 0.001) { PERF.scale = Math.max(PERF.minScale, PERF.scale - (PERF.fps < 40 ? 0.15 : 0.08)); applyPixelRatio(); PERF.cool = 0.7; }
       else if (PERF.tier > 0) { setTier(PERF.tier - 1); PERF.cool = 1.5; }
     } else if (PERF.fps > 58 && PERF.scale >= 1 && PERF.tier < PERF.maxTier && PERF.cool <= 0 && PERF.dropped) {
@@ -5781,10 +6104,10 @@
   // Qualidade gráfica: presets + bloom (PC usa Ultra; Android usa Média)
   // =========================================================================
   const QUALITY = {
-    baixa: { label: 'Baixa', pr: 0.75, prCap: 1.25, shadows: false, shadowSize: 1024, lights: 0, bloom: false, lambert: true },
-    media: { label: 'Média', pr: 1, prCap: 1.5, shadows: true, shadowSize: 1024, lights: 2, bloom: false, lambert: false },
-    alta: { label: 'Alta', pr: 1, prCap: 2, shadows: true, shadowSize: 2048, lights: 6, bloom: true, bloomRes: 0.5, lambert: false },
-    ultra: { label: 'Ultra', pr: 1, prCap: 2, shadows: true, shadowSize: 4096, lights: 10, bloom: true, bloomRes: 1, lambert: false },
+    baixa: { label: 'Baixa', pr: 0.75, prCap: 1.25, shadows: false, shadowSize: 1024, lights: 0, bloom: false, lambert: true, fx: 0.5, ash: 0 },
+    media: { label: 'Média', pr: 1, prCap: 1.5, shadows: true, shadowSize: 1024, lights: 2, bloom: false, lambert: false, fx: 0.8, ash: 160 },
+    alta: { label: 'Alta', pr: 1, prCap: 2, shadows: true, shadowSize: 2048, lights: 6, bloom: true, bloomRes: 0.5, lambert: false, ibl: true, grade: true, msaa: 2, fx: 1, ash: 320 },
+    ultra: { label: 'Ultra', pr: 1, prCap: 2, shadows: true, shadowSize: 4096, lights: 10, bloom: true, bloomRes: 1, lambert: false, ibl: true, grade: true, msaa: 4, gtao: true, fx: 1, ash: 520 },
   };
   Q = QUALITY.alta;
   function defaultQuality() {
@@ -5793,15 +6116,53 @@
     return LOW ? 'media' : 'alta';
   }
   function currentQuality() { return (SAVE.settings && SAVE.settings.quality) || defaultQuality(); }
+  // Pós-processamento: MSAA → oclusão de ambiente (GTAO, Ultra) → bloom → saída → correção de cor e vinheta
+  let gtaoPass = null, gradePass = null;
+  const GRADE = {
+    uniforms: { tDiffuse: { value: null }, contrast: { value: 1.06 }, saturation: { value: 1.05 }, vignette: { value: 0.9 }, tint: { value: new THREE.Vector3(1, 1, 1) } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform sampler2D tDiffuse; uniform float contrast; uniform float saturation; uniform float vignette; uniform vec3 tint; varying vec2 vUv;
+      void main() {
+        vec4 c = texture2D(tDiffuse, vUv); vec3 col = c.rgb;
+        float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+        col = mix(vec3(l), col, saturation);
+        col = (col - 0.5) * contrast + 0.5;
+        col *= tint;
+        vec2 d = vUv - 0.5; col *= clamp(1.0 - dot(d, d) * vignette, 0.0, 1.0);
+        gl_FragColor = vec4(col, c.a);
+      }`,
+  };
+  const MOOD_GRADE = {
+    stone: [1.0, 0.99, 0.97], dusk: [1.05, 0.97, 0.96], lava: [1.07, 0.97, 0.9], dark: [0.95, 0.98, 1.06], hall: [1.03, 0.99, 0.96],
+  };
+  function disposeComposer() {
+    try { for (const ps of composer.passes) ps.dispose && ps.dispose(); composer.dispose && composer.dispose(); } catch (_) { /* ignora */ }
+    composer = null; bloomPass = null; gtaoPass = null; gradePass = null;
+  }
   function ensureComposer() {
-    if (composer || !EX.EffectComposer || !EX.UnrealBloomPass) return !!composer;
+    if (composer) disposeComposer();
+    if (!EX.EffectComposer || !EX.UnrealBloomPass) return false;
     try {
-      composer = new EX.EffectComposer(renderer);
+      const rt = new THREE.WebGLRenderTarget(Math.max(1, W), Math.max(1, H), { type: THREE.HalfFloatType, samples: renderer.capabilities.isWebGL2 ? (Q.msaa || 0) : 0 });
+      composer = new EX.EffectComposer(renderer, rt);
       composer.addPass(new EX.RenderPass(scene, camera));
+      if (Q.gtao && EX.GTAOPass) {
+        gtaoPass = new EX.GTAOPass(scene, camera, Math.max(1, W), Math.max(1, H), undefined, { radius: 0.55, distanceExponent: 1.6, thickness: 1.2, scale: 1.0, samples: 12, distanceFallOff: 1.0, screenSpaceRadius: false });
+        gtaoPass.blendIntensity = 0.85;
+        // o desenho de normais do GTAO não deve ver partículas, rastros e brilhos transparentes
+        const orig = gtaoPass.render.bind(gtaoPass), hidden = [];
+        gtaoPass.render = (r, w, rd, dt, mask) => {
+          scene.traverse((o) => { if (o.visible && (o.isSprite || o.isPoints || (o.material && !Array.isArray(o.material) && (o.material.transparent || o.material.isShaderMaterial)))) { o.visible = false; hidden.push(o); } });
+          try { orig(r, w, rd, dt, mask); } finally { for (const o of hidden) o.visible = true; hidden.length = 0; }
+        };
+        composer.addPass(gtaoPass);
+      }
       bloomPass = new EX.UnrealBloomPass(new THREE.Vector2(W, H), 0.55, 0.5, 0.86); // força, raio, limiar
       composer.addPass(bloomPass);
       composer.addPass(new EX.OutputPass());
-    } catch (err) { console.warn('Bloom indisponível', err); composer = null; }
+      if (Q.grade && EX.ShaderPass) { gradePass = new EX.ShaderPass(GRADE); composer.addPass(gradePass); }
+      composer.setPixelRatio(PERF.basePR * PERF.scale); composer.setSize(W, H);
+    } catch (err) { console.warn('Pós-processamento indisponível', err); composer = null; }
     return !!composer;
   }
   function applyQuality(key) {
@@ -5809,18 +6170,19 @@
     Q = QUALITY[QKEY];
     PERF.basePR = Math.min(window.devicePixelRatio || 1, Q.prCap) * Q.pr;
     PERF.scale = 1; PERF.cool = 1.5;
-    PERF.maxTier = Q.bloom ? 3 : Q.lights ? 2 : Q.shadows ? 1 : 0;
+    PERF.maxTier = Q.gtao ? 4 : Q.bloom ? 3 : Q.lights ? 2 : Q.shadows ? 1 : 0;
     sun.shadow.mapSize.set(Q.shadowSize, Q.shadowSize);
     if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
     renderer.shadowMap.type = QKEY === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
-    if (Q.bloom) ensureComposer();
+    if (Q.bloom) ensureComposer(); else if (composer) { disposeComposer(); }
     setTier(PERF.maxTier);
     applyPixelRatio();
     if (ENV && ENV.map) onMapChanged(ENV.map); // refaz luzes/materiais do cenário
   }
-  // níveis do governador: 3 = bloom · 2 = luzes das tochas · 1 = sombras · 0 = nada disso
+  // níveis do governador: 4 = oclusão de ambiente · 3 = bloom e cor · 2 = luzes das tochas · 1 = sombras · 0 = nada disso
   function setTier(t) {
     PERF.tier = Math.min(t, PERF.maxTier === undefined ? t : PERF.maxTier);
+    if (gtaoPass) gtaoPass.enabled = PERF.tier >= 4;
     const maxL = PERF.tier >= 2 ? Q.lights : 0;
     torchLights.forEach((L, i) => { L.visible = i < maxL; });
     const sh = PERF.tier >= 1 && Q.shadows;
@@ -5846,10 +6208,16 @@
     const m = MOODS[key] || MOODS.stone;
     scene.background.set(m.bg); scene.fog.color.set(m.bg);
     scene.fog.near = m.fog[0]; scene.fog.far = m.fog[1];
-    hemi.color.set(m.hemi[0]); hemi.groundColor.set(m.hemi[1]); hemi.intensity = m.hemi[2];
+    hemi.color.set(m.hemi[0]); hemi.groundColor.set(m.hemi[1]); hemi.intensity = m.hemi[2] * (Q && Q.ibl ? 0.62 : 1);
     sun.color.set(m.sun[0]); sun.intensity = m.sun[1];
     renderer.toneMappingExposure = m.exp;
+    moodKey = key;
+    const gt = MOOD_GRADE[key] || MOOD_GRADE.stone;
+    gradeTint.set(gt[0], gt[1], gt[2]);
+    applyIBL(ENV_KEY_OVERRIDE || key);
   }
+  let moodKey = 'stone', ENV_KEY_OVERRIDE = null;
+  const gradeTint = new THREE.Vector3(1, 1, 1);
   MW = 45; MH = 32.5; OUT_W = 56; OUT_H = 44;
   function disposeEnv() {
     if (!ENV) return;
@@ -5866,6 +6234,8 @@
   function onMapChanged(map) {
     disposeEnv();
     clearProps();
+    clearFx();
+    ENV_KEY_OVERRIDE = map.id === 'provacao' ? 'trial' : null;
     MW = map.w * U; MH = map.h * U;
     OUT_W = Math.ceil((MW + GUTTER * 2) / 4) * 4; OUT_H = Math.ceil((MH + GUTTER * 2) / 4) * 4;
     applyMood(map.mood);
@@ -5927,7 +6297,11 @@
       f.userData.ownMat = true;
       f.position.set(x + Math.sin(ry) * 0.35, y + 0.65, z + Math.cos(ry) * 0.35); f.scale.set(1.6, 1.6, 1);
       ENV.root.add(f);
-      dungeonFlames.push({ f, seed: R() * 10 });
+      const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: fxTex('flame'), color: '#ffb060', transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }));
+      fl.userData.ownMat = true;
+      fl.position.copy(f.position); fl.position.y -= 0.05; fl.scale.set(0.55, 0.8, 1);
+      ENV.root.add(fl);
+      dungeonFlames.push({ f, fl, seed: R() * 10 });
     }
     // luzes reais: distribuídas pelas tochas (o preset decide quantas acendem)
     const order = torchSpots.map((t, i) => [t, (i * 7919) % torchSpots.length]).sort((a, b) => a[1] - b[1]).map((a) => a[0]);
@@ -6577,6 +6951,7 @@
     for (const t of dungeonFlames) {
       const f = 0.85 + Math.sin(realT * 13 + t.seed) * 0.08 + Math.sin(realT * 23 + t.seed * 2) * 0.06;
       t.f.material.opacity = 0.62 * f; t.f.scale.set(1.5 * f, 1.7 * f, 1);
+      if (t.fl) { t.fl.material.opacity = t.fl.material.map.ok ? 0.95 : 0; t.fl.scale.set(0.5 * f, 0.85 * (0.9 + Math.sin(realT * 17 + t.seed) * 0.12), 1); t.fl.material.rotation = Math.sin(realT * 5 + t.seed) * 0.12; }
     }
     for (let i = 0; i < torchLights.length; i++) torchLights[i].intensity = 22 * (0.88 + Math.sin(realT * 11 + i * 3) * 0.08);
     if (P.lock && !P.lock.dead && views.get(P.lock)) {
@@ -6591,6 +6966,14 @@
     syncLava();
     updateDecor();
     syncProps();
+    updateFxSystems(rdt, tx || lerp(P.px, P.x, alpha) * U, tz || lerp(P.py, P.y, alpha) * U);
+    if (gradePass) {
+      const u = gradePass.uniforms, br = clamp(G.brechaT || 0, 0, 1);
+      u.tint.value.set(gradeTint.x * (1 - br * 0.12), gradeTint.y * (1 - br * 0.03), gradeTint.z * (1 + br * 0.1));
+      u.saturation.value = 1.06 - br * 0.45 - (P.hp < P.maxHp * 0.25 && G.state === 'play' ? 0.25 : 0);
+      u.contrast.value = 1.06 + br * 0.08;
+      u.vignette.value = 0.9 + br * 0.6;
+    }
     if ((realT * 4 | 0) !== (lastHintTick | 0)) { lastHintTick = realT * 4; hintWatch(); }
     updateHints(rdt);
     updateLobVisuals();
@@ -6947,7 +7330,7 @@
   const SAVE_KEY = 'laminaRubra.save.v2';
   const DEFAULT_SAVE = () => ({
     unlocked: 0, starts: {}, embers: {}, ranks: {}, relicsSeen: {}, seen: {}, done: false, trialBest: 0,
-    settings: { quality: null, sens: 1, invertY: false, capSize: 'm' },
+    settings: { quality: null, sens: 1, invertY: false, capSize: 'm', music: 0.6, sfx: 0.9 },
     hero: 'selen', weaponOf: {}, owned: {}, temper: {}, cinzas: 0, rescued: {}, hints: {},
   });
   let SAVE = DEFAULT_SAVE();
@@ -6956,7 +7339,33 @@
     if (raw) SAVE = Object.assign(DEFAULT_SAVE(), JSON.parse(raw));
     SAVE.settings = Object.assign(DEFAULT_SAVE().settings, SAVE.settings || {});
   } catch (_) { /* sem armazenamento: joga sem salvar */ }
-  function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(SAVE)); } catch (_) { /* ignora */ } }
+  function persist() { window.__LR_SETTINGS = SAVE.settings; try { localStorage.setItem(SAVE_KEY, JSON.stringify(SAVE)); } catch (_) { /* ignora */ } }
+  window.__LR_SETTINGS = SAVE.settings;
+  // ---------- Trilha: qual faixa toca agora ----------
+  const CH_MUSIC = [['explore_stone', 'combat_1'], ['explore_dusk', 'combat_2'], ['explore_lava', 'combat_3'], ['explore_dark', 'combat_4'], ['anguish', 'combat_5'], ['explore_lava', 'boss_1']];
+  let combatHold = 0;
+  function musicTick(dt) {
+    const open = OVERLAYS.find((o) => { const el = $(o); return el && el.classList.contains('show'); });
+    let name = null, fast = false;
+    if (open === 'figueira') name = 'figueira';
+    else if (open === 'credits' || (CAPS.cine && CAPS.cine.lines === STORY.epilogue)) name = 'credits';
+    else if (open === 'result') name = 'result';
+    else if (G.state === 'menu' || open === 'menu' || open === 'chapters' || open === 'codex' || open === 'controls' || (open === 'options' && G.state === 'menu')) name = 'menu';
+    else if (CAPS.cine && CAPS.cine.lines === STORY.prologue) name = 'anguish';
+    else if (G.mode === 'trial') name = G.wave % 2 ? 'trial_1' : 'trial_2';
+    else {
+      const ci = clamp(CAMPAIGN.idx, 0, CH_MUSIC.length - 1);
+      const boss = G.enemies.find((e) => e.boss && !e.dead && e.state !== 'lurk');
+      const fighting = CAMPAIGN.active.length && G.enemies.some((e) => !e.dead && CAMPAIGN.active.includes(e.enc) && e.state !== 'lurk');
+      if (fighting) combatHold = 4; else combatHold -= dt;
+      if (boss) name = boss.phase === 2 ? 'boss_2' : 'boss_1';
+      else if (combatHold > 0) { name = CH_MUSIC[ci][1]; fast = true; }
+      else name = CH_MUSIC[ci][0];
+    }
+    Music.set(name, fast);
+    Music.setDuck(G.state === 'paused' ? 0.45 : G.state === 'over' ? 0.35 : 1);
+    Music.tick(dt);
+  }
 
   const OVERLAYS = ['menu', 'chapters', 'codex', 'options', 'controls', 'relicPick', 'result', 'pause', 'over', 'credits', 'figueira'];
   // herói disponível? (Selen sempre; os outros depois de resgatados na campanha)
@@ -6982,7 +7391,7 @@
       enemies: [], projectiles: [], particles: [], texts: [], orbs: [], slashes: [], ghosts: [], rings: [], lobs: [],
       spawnQueue: [], spawnT: 0, waveDelay: 0, dirT: 0, overT: -1, run: { embers: [] }, codexSeen: G.codexSeen || {},
       banner: { text: '', sub: '', t: 0 },
-      corpses: [], blades: [], cinzas: 0, brechaT: 0, worldRev: 0,
+      corpses: [], blades: [], cinzas: 0, brechaT: 0, worldRev: 0, fxq: [],
     });
     STYLE.pts = 0; STYLE.last.length = 0; STYLE.rank = 0; STYLE.peak = 0; STYLE.sum = 0; STYLE.time = 0;
     for (const k in READ) READ[k] = 0;
@@ -7283,22 +7692,30 @@
     const s = SAVE.settings;
     $('optQuality').value = currentQuality();
     $('optSens').value = s.sens;
+    $('optMusic').value = s.music === undefined ? 0.6 : s.music;
+    $('optSfx').value = s.sfx === undefined ? 0.9 : s.sfx;
     $('optInvert').checked = !!s.invertY;
     $('optCap').value = s.capSize;
     show('options');
   }
   $('optQuality').addEventListener('change', (e) => { SAVE.settings.quality = e.target.value; applyQuality(e.target.value); persist(); });
   $('optSens').addEventListener('input', (e) => { SAVE.settings.sens = +e.target.value; persist(); });
+  $('optMusic').addEventListener('input', (e) => { SAVE.settings.music = +e.target.value; persist(); });
+  $('optSfx').addEventListener('input', (e) => { SAVE.settings.sfx = +e.target.value; persist(); Sound.play('clang'); });
   $('optInvert').addEventListener('change', (e) => { SAVE.settings.invertY = e.target.checked; persist(); });
   $('optCap').addEventListener('change', (e) => { SAVE.settings.capSize = e.target.value; document.body.dataset.cap = e.target.value; persist(); });
   document.body.dataset.cap = SAVE.settings.capSize;
 
   let optionsFrom = 'menu';
+  // qualquer toque/tecla libera o áudio (os navegadores exigem um gesto do jogador)
+  const unlockAudio = () => { Sound.init(); Sound.resume(); Music.start(); };
+  window.addEventListener('pointerdown', unlockAudio, true);
+  window.addEventListener('keydown', unlockAudio, true);
   document.addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-go]');
     if (!b) return;
     const go = b.dataset.go;
-    Sound.init(); Sound.resume();
+    Sound.init(); Sound.resume(); Music.start(); Sound.play('ui');
     if (go === 'continue') startChapter(SAVE.unlocked, false);
     else if (go === 'new') {
       const has = SAVE.unlocked > 0 || Object.keys(SAVE.starts).length > 0;
@@ -7366,6 +7783,7 @@
       if (n === 6) acc = Math.min(acc, STEP);
     }
     if (G.state === 'play' || G.state === 'cine') updateCaptions(dt);
+    musicTick(dt);
     render(G.state === 'play' ? acc / STEP : 1, dt);
     requestAnimationFrame(frame);
   }
@@ -7385,7 +7803,7 @@
     zoom: (d) => { CAMERA.dist = d; }, CAMERA, PERF: () => PERF, toggleLock, OBST: () => OBST, HAZ: () => HAZ, COVER: () => COVER, freeSpot, hasLOS, findPath, inObstacle, inLava, TYPES,
     HEROES, WEAPONS, SPECIALS, READ, STYLE, CAMFX, resetPlayer, tryAction, startSpecial, damageEnemy, openFigueira, heroOpen, views: () => views, playerView: () => playerView,
     setHero: (h, w) => { SAVE.hero = h; if (w) SAVE.weaponOf[h] = w; },
-    hold: (on) => { DEBUG_HOLD.on = on; }, renderNow: (dt) => render(1, dt || 1 / 60), CAMFX,
+    hold: (on) => { DEBUG_HOLD.on = on; }, audio: () => ({ sfx: Sound.stats(), music: Music.current, m: Music.stats() }), env: () => ({ hdr: scene.environment !== BASE_ENV, keys: Object.keys(envCache).map((k) => k + ':' + (envCache[k] === 'loading' ? 'loading' : envCache[k] ? 'ok' : 'fail')), fx: Object.keys(FXS).map((k) => k + ':' + FXS[k].list.length + (FXS[k].tex.ok ? '' : '!')).join(' ') }), renderNow: (dt) => render(1, dt || 1 / 60), CAMFX,
     info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, progs: renderer.info.programs.length }),
   };
 })();

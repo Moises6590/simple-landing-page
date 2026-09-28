@@ -6,5 +6,8 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 window.THREE = THREE;
-window.THREE_EXTRAS = { GLTFLoader, SkeletonUtils, EffectComposer, RenderPass, UnrealBloomPass, OutputPass };
+window.THREE_EXTRAS = { GLTFLoader, SkeletonUtils, EffectComposer, RenderPass, UnrealBloomPass, OutputPass, ShaderPass, GTAOPass, RGBELoader };

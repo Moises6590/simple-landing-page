@@ -127,3 +127,19 @@ node standalone.mjs desktop && cd desktop-lite && node build.mjs && npx @neutral
   - portões que fecham a arena.
 - **Medidor de estilo** de D até "Brasa Viva", com multiplicador de pontos, e dicas de controle na primeira vez que cada mecânica aparece.
 - **Animações**: uma biblioteca única de animações compartilhada por todos os personagens, porque os KayKit usam o mesmo esqueleto. São 60 animações, e os modelos ficaram menores que antes.
+
+### Build 8: trilha sonora, efeitos gravados e gráficos de PC
+
+- **Trilha orquestral** de Kevin MacLeod (CC BY 4.0, créditos na tela final e em `game3d/assets/CREDITS.md`):
+  - cada capítulo tem uma faixa de exploração e outra de combate, com crossfade quando o esquadrão aparece;
+  - o chefe tem duas faixas (uma por fase);
+  - menu, Figueira, prólogo, resultado e créditos têm música própria.
+- **Efeitos gravados** (CC0, Kenney e OpenGameArt): 42 tipos com variações e tom aleatório, som estéreo pela posição do inimigo e passos que acompanham a velocidade. Os sons sintetizados ficaram como reserva.
+- **Gráficos em Alta e Ultra:**
+  - iluminação por HDRI de um lugar real em cada capítulo (Poly Haven);
+  - oclusão de ambiente GTAO no Ultra;
+  - antisserrilhado MSAA;
+  - correção de cor e vinheta por capítulo; a Brecha e a vida baixa mudam as cores.
+- **Partículas com textura** (Kenney): fumaça e marcas de queimado nas explosões, poeira nas quedas e esquivas, faíscas nos bloqueios, círculos mágicos, geada, brasas subindo da lava, chamas nas tochas e cinzas flutuando no ar.
+- **Opções**: volume da música e dos efeitos.
+- **Pacotes**: `tools/standalone.mjs` gera uma pasta (página + `assets_*.js` + `audio/music`). Os pacotes prontos ficam em [`releases/`](releases/).

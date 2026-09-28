@@ -101,6 +101,12 @@
           <option value="ultra">Ultra (PC)</option>
         </select>
       </label>
+      <label class="opt">Volume da música
+        <input id="optMusic" type="range" min="0" max="1" step="0.05">
+      </label>
+      <label class="opt">Volume dos efeitos
+        <input id="optSfx" type="range" min="0" max="1" step="0.05">
+      </label>
       <label class="opt">Sensibilidade da câmera
         <input id="optSens" type="range" min="0.4" max="2.2" step="0.1">
       </label>
@@ -198,6 +204,11 @@
       <p class="sub">Fim de <i>As Cinzas de Ferrumbra</i>.</p>
       <p>Obrigado por jogar.</p>
       <p class="small">Personagens e cenário: KayKit, de Kay Lousberg (CC0) · Motor 3D: Three.js (MIT)</p>
+      <p class="small">Música: Kevin MacLeod (incompetech.com), licença Creative Commons: By Attribution 4.0 —
+        “Echoes of Time v2”, “Long Note Four”, “Anguish”, “Lightless Dawn”, “Heroic Age”, “Oppressive Gloom”, “Dark Walk”, “The Descent”,
+        “Shadowlands 4 - Breath”, “Clash Defiant”, “Volatile Reaction”, “Crusade - Heavy Industry”, “Five Armies”, “Unholy Knight”,
+        “Rynos Theme”, “Night of Chaos”, “Achilles”, “Stormfront”.</p>
+      <p class="small">Efeitos sonoros e partículas: Kenney (CC0) e OpenGameArt (artisticdude, rubberduck, CC0) · Iluminação: Poly Haven (CC0)</p>
       <button class="play" data-go="menu">MENU</button>
     </div>
   </div>
@@ -220,8 +231,11 @@
     import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
     import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
     import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+    import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+    import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+    import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
     window.THREE = THREE;
-    window.THREE_EXTRAS = { GLTFLoader, MeshoptDecoder, SkeletonUtils, EffectComposer, RenderPass, UnrealBloomPass, OutputPass };
+    window.THREE_EXTRAS = { GLTFLoader, MeshoptDecoder, SkeletonUtils, EffectComposer, RenderPass, UnrealBloomPass, OutputPass, ShaderPass, GTAOPass, RGBELoader };
     const s = document.createElement('script');
     s.src = 'game.js';
     document.body.appendChild(s);
