@@ -795,6 +795,7 @@
     buildNav(); refreshLavaNav(); buildCover();
     for (const e of G.enemies) { e.path = null; e.fireC = null; e.hideC = null; }
     G.worldRev = (G.worldRev || 0) + 1;
+    if (typeof PHYS !== 'undefined') PHYS.dirty = true;
   }
   function addObstacle(ob) {
     OBST.push(ob);
@@ -804,6 +805,7 @@
   function removeObstacle(ob) { const i = OBST.indexOf(ob); if (i >= 0) { OBST.splice(i, 1); worldChanged(); } }
   // golpe/explosão atingiu uma peça do cenário
   function hitProps(x, y, face, range, arc, dmg, heavy, omni) {
+    physPush(x, y, face, range, arc, omni && heavy ? 9 : heavy ? 6 : 3.5, omni);
     for (let i = OBST.length - 1; i >= 0; i--) {
       const ob = OBST[i];
       if (!ob) continue;
@@ -840,6 +842,7 @@
         if (ob.fuse <= 0) {
           OBST.splice(i, 1); changed = true;
           explode(ob.x, ob.y, 120, 46, { hurtsPlayer: true, pdmg: 22, move: 'barril', env: true, poise: 120 });
+          physDebris(ob.x, ob.y, 'wood', 12, 7, 0.6); physDebris(ob.x, ob.y, 'iron', 3, 6, 0.6);
           styleAdd(40, 'barril');
           i = Math.min(i, OBST.length); // a explosão pode ter armado outros barris (reação em cadeia)
         }
@@ -849,6 +852,7 @@
           ob.landed = true;
           const L = ob.r * 5, a = ob.fallA, ux = Math.cos(a), uy = Math.sin(a);
           shake(0.6); Sound.play('slam'); vibrate(35);
+          physDebris(ob.x + ux * L * 0.6, ob.y + uy * L * 0.6, 'stone', 14, 4, 0.4);
           for (let k = 1; k <= 4; k++) { burst(ob.x + ux * L * k / 4, ob.y + uy * L * k / 4, 0, 10, '#8a8a90', 280, true); fxq('dust', ob.x + ux * L * k / 4, ob.y + uy * L * k / 4, 70); }
           // quem estiver na linha da queda
           for (const e of G.enemies) {
@@ -1457,8 +1461,35 @@
     for (const t of types) { const vv = VOICE_OF[t]; if (vv) set.add(vv[0]); if (t === 'chaplain' || t === 'boss') set.add('ghost'); }
     Sound.voices([...set]);
   }
+  // Variações visuais de cada golpe: outro trecho de captura + inclinação do tronco e do ombro
+  // (muda o plano do corte: diagonal alta, horizontal, de cima, de baixo). O tempo do acerto não muda.
+  //   [clipe, rolagem (rad), arfagem (rad)]
+  const ATK_VARIANTS = {
+    '1H_Melee_Attack_Slice_Diagonal': [['1H_Melee_Attack_Slice_Diagonal', 0, 0], ['Dualwield_Melee_Attack_Slice', 0.32, -0.05], ['Great_A', -0.28, 0.08], ['1H_Melee_Attack_Slice_Diagonal', -0.35, 0.12]],
+    '1H_Melee_Attack_Slice_Horizontal': [['1H_Melee_Attack_Slice_Horizontal', 0, 0], ['Dualwield_Melee_Attack_Chop', -0.3, 0.05], ['Great_B', 0.3, -0.05], ['1H_Melee_Attack_Slice_Horizontal', 0.38, 0.1]],
+    '1H_Melee_Attack_Chop': [['1H_Melee_Attack_Chop', 0, 0], ['2H_Melee_Attack_Chop', 0.18, 0.12], ['Sword_Wide', -0.25, 0], ['1H_Melee_Attack_Jump_Chop', 0, 0.15]],
+    Great_A: [['Great_A', 0, 0], ['1H_Melee_Attack_Slice_Diagonal', 0.3, 0.05], ['Sword_Wide', -0.3, 0.05]],
+    Great_B: [['Great_B', 0, 0], ['2H_Melee_Attack_Chop', -0.2, 0.1], ['Great_A', 0.35, -0.05]],
+    Dualwield_Melee_Attack_Slice: [['Dualwield_Melee_Attack_Slice', 0, 0], ['1H_Melee_Attack_Slice_Diagonal', -0.3, 0.05], ['Dualwield_Melee_Attack_Chop', 0.35, 0]],
+    Dualwield_Melee_Attack_Chop: [['Dualwield_Melee_Attack_Chop', 0, 0], ['1H_Melee_Attack_Slice_Horizontal', 0.3, 0], ['Dualwield_Melee_Attack_Slice', -0.35, 0.08]],
+    Dualwield_Melee_Attack_Stab: [['Dualwield_Melee_Attack_Stab', 0, 0], ['1H_Melee_Attack_Stab', 0.2, -0.05], ['Dualwield_Melee_Attack_Stab', -0.3, 0.1]],
+    Unarmed_Melee_Attack_Punch_A: [['Unarmed_Melee_Attack_Punch_A', 0, 0], ['Unarmed_Melee_Attack_Punch_B', 0.25, 0], ['Unarmed_Melee_Attack_Punch_A', -0.3, 0.1]],
+    Unarmed_Melee_Attack_Punch_B: [['Unarmed_Melee_Attack_Punch_B', 0, 0], ['Unarmed_Melee_Attack_Punch_A', -0.25, 0], ['Unarmed_Melee_Attack_Punch_B', 0.3, -0.08]],
+    '2H_Melee_Attack_Stab': [['2H_Melee_Attack_Stab', 0, 0], ['Sword_Lunge', 0.15, 0], ['2H_Melee_Attack_Stab', -0.25, 0.1]],
+    '1H_Melee_Attack_Stab': [['1H_Melee_Attack_Stab', 0, 0], ['Sword_Lunge', -0.15, 0], ['1H_Melee_Attack_Stab', 0.28, -0.06]],
+  };
+  const lastVariant = {};
+  function pickVariant(clip) {
+    const list = ATK_VARIANTS[clip];
+    if (!list) return [clip, 0, 0];
+    let i = Math.floor(Math.random() * list.length);
+    if (i === lastVariant[clip] && list.length > 1) i = (i + 1 + Math.floor(Math.random() * (list.length - 1))) % list.length;
+    lastVariant[clip] = i;
+    return list[i];
+  }
   function startAttack(a, mv, forced) {
     a = a || P.set.l1;
+    { const vr = pickVariant(a.clip); P.atkClip = vr[0]; P.atkRoll = vr[1] * (Math.random() < 0.5 ? 1 : 0.8); P.atkPitch = vr[2]; }
     const aim = forced ? { ang: Math.atan2(forced.y - P.y, forced.x - P.x), target: forced, dist: len(forced.x - P.x, forced.y - P.y) } : aimAssist(mv, a.range);
     P.state = 'attack'; P.t = 0; P.atk = a; P.confirm = false; P.actionId++;
     P.atkKind = a === P.set.dash ? 'dash' : (a === P.set.l1 || a === P.set.l2 || a === P.set.l3 || a === P.set.l4) ? 'combo' : 'special';
@@ -2187,7 +2218,7 @@
     P.hp -= dmg; G.dmgTaken += dmg;
     G.noHit = false;
     STYLE.pts *= 0.45; // apanhar derruba o estilo
-    P.flinchT = FLINCH_TIME; P.flinchA = ang; P.flinchK = 1.3;
+    P.flinchT = FLINCH_TIME; P.flinchA = ang; P.flinchK = 1.3; P.hitSeq = (P.hitSeq || 0) + 1; P.hitPow = kb;
     G.combo = 0; G.comboT = 0;
     G.hurtFlash = 0.35;
     hitstop(0.07, P, src.type ? src : null); shake(0.45);
@@ -3081,6 +3112,7 @@
     burst(x, y, 0, 26, '#ffb03c', 380, true);
     burst(x, y, -Math.PI / 2, 12, '#5a5048', 220, true);
     Sound.play('boom', x, y); shake(o.small ? 0.2 : 0.4); vibrate(20);
+    if (!o.small) physDebris(x, y, 'stone', Math.round(clamp(R / 18, 4, 10)), clamp(R / 22, 3, 8), 0.3);
     if (o.hurtsPlayer && P.state !== 'dead' && len(P.x - x, P.y - y) < R + P.r) hurtPlayer({ x, y }, o.pdmg || dmg * 0.6, Math.atan2(P.y - y, P.x - x), 420, false, { unblockable: true });
     for (const e of G.enemies) {
       if (!targetable(e) || e === o.owner || (e.boss && o.fromEnemy)) continue;
@@ -3505,6 +3537,7 @@
     if (e.dead || e.state === 'spawn' || (e.iframe > 0 && !o.lava)) return false;
     if (e.captured > 0 && !o.fromEnemy) return false;
     e.bigHit = !!(o.heavy || o.finisher || kb >= 420);
+    e.hitSeq = (e.hitSeq || 0) + 1; e.hitPow = kb;
     if (e.boss && !o.fromEnemy && bossAnchored()) {
       if (!e.anchorTxt || G.time - e.anchorTxt > 1.2) { e.anchorTxt = G.time; addText(e.x, e.y - e.r - 30, 'AS CORRENTES O PROTEGEM', '#ffb03c', 14); }
       burst(e.x, e.y, ang + Math.PI, 8, '#ff8a3a', 240); Sound.play('clang', e.x, e.y);
@@ -3604,6 +3637,7 @@
     G.score += pts; G.kills++;
     G.cinzas += Math.round((e.mini ? 25 : e.elite ? 5 : 1) * STYLE_RANKS[STYLE.rank].mult);
     addText(e.x, e.y - e.r - 26, '+' + pts, '#9fe870', 13);
+    if (e.type === 'cannon') physDebris(e.x, e.y, 'iron', 12, 6, 1); else if (e.type === 'drone') physDebris(e.x, e.y, 'brass', 5, 3, 1.4);
     burst(e.x, e.y, ang, e.r > 20 ? 34 : 22, e.color, 360, true);
     G.rings.push({ x: e.x, y: e.y, r: e.r, max: e.r + 40, t: 0, dur: 0.3, color: '255,255,255' });
     Sound.play(TYPES[e.type].undead ? 'bone' : 'die', e.x, e.y); Sound.play('die', e.x, e.y);
@@ -3788,7 +3822,7 @@
         { kind: 'destroy', prop: 'chain', hp: 70, at: [[-560, -620], [180, -650], [760, 610]], text: 'Silencie o Sino dos Mortos: quebre as correntes',
           startLine: 'Enquanto o sino tocar, os mortos continuam levantando. Três correntes o prendem à torre.',
           lines: ['Uma corrente estala. O sino desafina.', 'A segunda corrente cede. O sino geme como gente.'],
-          doneLine: 'O sino cala. Quem ele chamou volta ao chão.', spawn: { type: 'grunt', every: 6.5, max: 3, collapse: true } },
+          doneLine: 'O sino cala. Quem ele chamou volta ao chão.', spawn: { type: 'grunt', every: 8, max: 2, collapse: true } },
         { kind: 'clear', encs: [2], text: 'Derrote o Sargento Ossívio' },
       ],
       encs: [
@@ -3898,7 +3932,7 @@
         { kind: 'destroy', prop: 'hive', hp: 90, at: [[-300, -660], [380, 660], [900, -690]], guarded: false, text: 'Destrua as colmeias de latão',
           startLine: 'As vespas saem de colmeias presas ao teto. Enquanto elas existirem, o ninho não acaba.',
           lines: ['Uma colmeia cai em pedaços de latão quente.', 'A segunda colmeia para de zumbir.'], doneLine: 'O zumbido morre. Sobram só as que já voavam.',
-          spawn: { type: 'drone', every: 7, max: 3, from: 'prop' } },
+          spawn: { type: 'drone', every: 9, max: 2, from: 'prop' } },
         { kind: 'collect', item: 'record', at: [[-420, 650], [560, -210], [980, -560]], text: 'Recolha os registros de cobre da Guilda',
           lines: ["'Carga: dezesseis lâminas da Ordem, apagadas. Destino: Fornalha-Mãe.'", "'A dezessete não se apaga. Levem-na viva até o Coração.'", "'Quando a brasa dela acender o Coração, Ferrumbra nunca mais esfria.' — V. C."] },
         { kind: 'reach', at: [900, 550], r: 150, text: 'Investigue o altar da Guilda' },
@@ -4006,7 +4040,17 @@
     G.embers = (map.embers || []).map((b, i) => ({ x: b.x, y: b.y, id: map.id + ':' + i, taken: SAVE.embers[map.id + ':' + i] || false }));
     CAMPAIGN.altar = null; CAMPAIGN.exit = null;
     CAMPAIGN.stories = (map.story || []).map((st) => Object.assign({ done: false }, st));
-    CAMPAIGN.encs = (map.encs || []).map((d, i) => ({ def: d, i, state: 'waiting', t: 0, wait: 0, tactic: d.tactic, total: d.spawns.length, killed: 0, pending: [] }));
+    // encontros menores: até ~5 na luta; dois dos que sobram chegam depois como reforço, o resto fica de fora
+    const trim = (spawns) => {
+      const key = spawns.filter((sp) => sp.mini || sp.bait || sp.type === 'boss');
+      const strong = spawns.filter((sp) => !key.includes(sp) && ['brute', 'cannon', 'chaplain'].includes(sp.type)).slice(0, 2);
+      const rest = spawns.filter((sp) => !key.includes(sp) && !strong.includes(sp) && !['brute', 'cannon', 'chaplain'].includes(sp.type));
+      const now = Math.max(1, 4 - key.length - strong.length);
+      const out = key.concat(strong, rest.slice(0, now));
+      rest.slice(now, now + 1).forEach((sp) => out.push(Object.assign({}, sp, { delay: 10, awake: true, cloak: false, drop: sp.type === 'drone' })));
+      return out;
+    };
+    CAMPAIGN.encs = (map.encs || []).map((d0, i) => { const d = Object.assign({}, d0, { spawns: trim(d0.spawns) }); return { def: d, i, state: 'waiting', t: 0, wait: 0, tactic: d.tactic, total: d.spawns.length, killed: 0, pending: [] }; });
     G.blades = (map.blades || []).map((b) => ({ x1: b[0], y1: b[1], x2: b[2], y2: b[3], x: b[0], y: b[1], r: 24, speed: b[4] || 1.2, t: rand(0, TAU), spin: 0 }));
     for (const enc of CAMPAIGN.encs) {
       for (const sp of enc.def.spawns) {
@@ -4038,7 +4082,7 @@
     if (!enc || enc.state !== 'waiting') return;
     enc.state = 'active'; enc.t = 0;
     const d = enc.def;
-    G.maxMelee = d.maxMelee || 2; G.maxRanged = d.maxRanged || 1; G.maxDrone = d.maxDrone || 2;
+    G.maxMelee = Math.min(d.maxMelee || 2, 2); G.maxRanged = Math.min(d.maxRanged || 1, 1); G.maxDrone = Math.min(d.maxDrone || 2, 2);
     if (d.bossIntro) { startCine(STORY.events.bossIntro.lines, { focus: G.enemies.find((e) => e.boss), after: () => {} }); }
     else if (d.caption) caption(d.caption, 4);
     const mini = G.enemies.find((e) => e.enc === enc && e.mini);
@@ -4174,6 +4218,8 @@
     shake(0.5); vibrate(30); Sound.play('crack', ob.x, ob.y); Sound.play('boom', ob.x, ob.y);
     burst(ob.x, ob.y, 0, 30, g.prop === 'hive' ? '#ffcf6a' : '#8a8a90', 340, true);
     fxq('dust', ob.x, ob.y, 90); fxq('boom', ob.x, ob.y, 60);
+    physDebris(ob.x, ob.y, g.prop === 'hive' ? 'brass' : g.prop === 'cage' ? 'iron' : 'stone', 10, 5, 1.0);
+    if (g.prop === 'chain' || g.prop === 'anchor') physDebris(ob.x, ob.y, 'iron', 8, 4, 2.0);
     const left = g.pts.filter((q) => !q.done).length;
     addText(ob.x, ob.y - 70, left ? (g.need - left) + '/' + g.need : 'FEITO', '#ffe27a', 16);
     if (g.lines && g.lines[p.k]) caption(g.lines[p.k], 3.5);
@@ -4366,14 +4412,14 @@
   function buildWave(n) {
     const list = [];
     const add = (t, c) => { for (let i = 0; i < c; i++) list.push(t); };
-    add('grunt', 2 + n);
+    add('grunt', 1 + Math.ceil(n * 0.6)); // ondas menores: menos gente, cada um mais perigoso
     add('shield', n >= 2 ? Math.min(3, Math.floor(n / 2)) : 0);
     add('grenadier', n >= 4 ? Math.min(2, Math.floor((n - 2) / 3)) : 0);
     add('chaplain', n >= 5 ? 1 : 0);
-    add('archer', n >= 2 ? Math.floor(n / 2) : 0);
-    add('rogue', n >= 3 ? Math.floor((n - 1) / 2) : 0);
+    add('archer', n >= 2 ? Math.min(2, Math.floor(n / 3)) : 0);
+    add('rogue', n >= 3 ? Math.min(2, Math.floor((n - 1) / 3)) : 0);
     add('gunner', n >= 3 ? Math.floor((n - 1) / 3) + 1 : 0);
-    add('drone', n >= 4 ? Math.min(6, n - 2) : 0);
+    add('drone', n >= 4 ? Math.min(3, Math.floor((n - 2) / 2)) : 0);
     add('brute', n >= 4 ? Math.floor((n - 2) / 2) : 0);
     add('cannon', n >= 6 ? Math.min(2, Math.floor((n - 4) / 3)) : 0);
     for (let i = list.length - 1; i > 0; i--) {
@@ -4393,10 +4439,10 @@
       if (changed) { worldChanged(); collideWorld(P); }
     }
     G.spawnQueue = buildWave(n);
-    G.maxAlive = Math.min(4 + Math.ceil(n * 0.8), 12);
-    G.maxMelee = Math.min(2 + Math.floor(n / 3), 4);
-    G.maxRanged = Math.min(1 + Math.floor(n / 4), 3);
-    G.maxDrone = Math.min(1 + Math.floor(n / 4), 3);
+    G.maxAlive = Math.min(3 + Math.ceil(n * 0.5), 7);
+    G.maxMelee = Math.min(1 + Math.floor(n / 3), 2);
+    G.maxRanged = Math.min(1 + Math.floor(n / 6), 2);
+    G.maxDrone = Math.min(1 + Math.floor(n / 5), 2);
     G.spawnT = 0.6;
     G.banner = { text: 'ONDA ' + n, sub: n % 5 === 0 ? 'Um campeão se aproxima…' : G.spawnQueue.length + ' inimigos', t: 2.4 };
     Sound.play('wave');
@@ -4960,6 +5006,8 @@
   }
 
   function disposeView(v) {
+    if (v.trail) { scene.remove(v.trail.mesh); v.trail.mesh.geometry.dispose(); v.trail.mesh.material.dispose(); v.trail = null; }
+    if (v.ragdoll && !v.ragdoll.freed && typeof physFreeRagdoll === 'function') physFreeRagdoll(v);
     scene.remove(v.root);
     if (v.mixer) { v.mixer.stopAllAction(); v.mixer.uncacheRoot(v.model); }
     for (const m of v.mats) m.dispose();
@@ -5260,7 +5308,7 @@
   const ASSET_BASE = 'assets/';
   // Página autocontida: modelos (JSON) e texturas (data URI) podem vir embutidos em window.__ASSETS
   const EMBED = window.__ASSETS || null;
-  const BUILD = 'build 12 · objetivos, vozes e movimento';
+  const BUILD = 'build 13 · física real e golpes variados';
   const ANIM_FILE = 'h/anims_h.glb';
   // texturas fotográficas do cenário (m = metros cobertos por uma repetição) e rochas escaneadas
   const ENV_TEX = {
@@ -5489,8 +5537,10 @@
     const holder = new THREE.Group();
     const bs = bone.getWorldScale(new THREE.Vector3()).x / v.root.scale.x || 1;
     let mesh;
-    if (G.proc) { mesh = procGear(G.proc, v.mats); holder.scale.setScalar(1 / bs); }
-    else {
+    if (G.proc) {
+      mesh = procGear(G.proc, v.mats); holder.scale.setScalar(1 / bs);
+      if (G.proc === 'staff') { holder.userData.tip = new THREE.Vector3(0, 1.2, 0); holder.userData.base = new THREE.Vector3(0, 0.55, 0); }
+    } else {
       mesh = MODELS.gltf[G.file].scene.clone(true);
       if (!G.size) {
         const sz = new THREE.Box3().setFromObject(MODELS.gltf[G.file].scene).getSize(new THREE.Vector3());
@@ -5498,6 +5548,12 @@
       }
       mesh.position.y = -(G.grip || 0);
       holder.scale.setScalar(G.len / G.size / bs);
+      if (!G.shield && !G.bow) {
+        if (G.maxY === undefined) G.maxY = new THREE.Box3().setFromObject(MODELS.gltf[G.file].scene).max.y;
+        const tipY = G.maxY - (G.grip || 0);
+        holder.userData.tip = new THREE.Vector3(0, tipY, 0);
+        holder.userData.base = new THREE.Vector3(0, tipY * (id === 'axe' || id === 'greataxe' || id === 'hammer' ? 0.62 : 0.25), 0);
+      }
       mesh.traverse((o) => {
         if (!o.isMesh) return;
         o.castShadow = true;
@@ -5929,6 +5985,25 @@
       b.quaternion.premultiply(_lq2.setFromAxisAngle(_lax, v.look * w));
     }
   }
+  // plano do corte: rola e arqueia coluna e ombro do braço da arma
+  const SWING_CHAIN = [['spine_01', 0.2], ['spine_02', 0.3], ['spine_03', 0.3], ['clavicle_r', 0.2]];
+  function swingLayer(v, dt) {
+    const sw = v.swing;
+    const tr = sw ? sw[0] * sw[2] : 0, tp = sw ? sw[1] * sw[2] : 0;
+    const k = Math.min(1, dt * 18);
+    v.swR = (v.swR || 0) + (tr - (v.swR || 0)) * k; v.swP = (v.swP || 0) + (tp - (v.swP || 0)) * k;
+    v.swing = null;
+    if (!v.bones || (Math.abs(v.swR) < 0.003 && Math.abs(v.swP) < 0.003)) return;
+    for (const [name, w] of SWING_CHAIN) {
+      const b = v.bones[name];
+      if (!b || !b.parent) continue;
+      modelQuat(b.parent, v.model, _lq).invert();
+      _lax.set(0, 0, 1).applyQuaternion(_lq);
+      b.quaternion.premultiply(_lq2.setFromAxisAngle(_lax, v.swR * w * 2));
+      _lax.set(1, 0, 0).applyQuaternion(_lq);
+      b.quaternion.premultiply(_lq2.setFromAxisAngle(_lax, v.swP * w * 2));
+    }
+  }
   function leanLayer(v, vx, vy, face, dt) {
     const ax = (vx - (v.lvx || 0)) / Math.max(dt, 1e-3), ay = (vy - (v.lvy || 0)) / Math.max(dt, 1e-3);
     v.lvx = vx; v.lvy = vy;
@@ -5998,8 +6073,9 @@
     const Wd = WEAPONS[P.weapon] || WEAPONS.rubra, set = P.set;
     switch (P.state) {
       case 'attack': {
-        const a = P.atk;
-        scrub(v, a.clip, P.t, atkTimes(a), markOf(a.clip), 0.06, v.alt);
+        const a = P.atk, ac = P.atkClip && v.clips[P.atkClip] ? P.atkClip : a.clip;
+        scrub(v, ac, P.t, atkTimes(a), markOf(ac), 0.06, v.alt);
+        v.swing = [P.atkRoll || 0, P.atkPitch || 0, Math.pow(Math.sin(Math.PI * clamp(P.t / (a.wind + a.active + a.rec), 0, 1)), 0.7)];
         // golpe giratório: o corpo dá a volta inteira durante o golpe
         if (ALIAS[a.clip] && ALIAS[a.clip].spin) v.spinTo = -(P.swingSide || 1) * TAU * easeOut(clamp((P.t - a.wind * 0.6) / (a.active + a.wind * 0.4), 0, 1));
         break;
@@ -6032,8 +6108,15 @@
       case 'throw': scrub(v, 'Throw', P.t, [0, 0.2, 0.42], [0.15, 0.5, 0.8], 0.06, v.alt); break;
       case 'special': specialAnim(v); break;
       case 'hurt': scrub(v, 'Hit_A', P.t, [0, 0.26], [0, 0.6], 0.04, v.alt); break;
-      case 'dead': onceAnim(v, 'Death_A', 1, 0.1); break;
+      case 'dead':
+        if (!v.ragdoll && PHYS.ready && physRagdoll(v, P.flinchA || P.face + Math.PI, P.hitPow || 260, { x: P.vx * U, z: P.vy * U })) physDropGear(v, P.flinchA || 0, 3);
+        if (!v.ragdoll) onceAnim(v, 'Death_A', 1, 0.1);
+        break;
       default: locomotion(v, P.vx, P.vy, P.face, Wd.idle);
+    }
+    if (v.ragdoll) { // morto: o corpo é da física
+      if (!v.ragdoll.freed) { physApplyRagdoll(v); if (P.deadT === undefined) P.deadT = 0; }
+      return;
     }
     v.mixer.update(dt);
     const bodyR = bodyYaw(v, dt);
@@ -6045,6 +6128,8 @@
       const busy = P.state === 'dash' || P.state === 'hurt' || P.state === 'dead' || P.state === 'special' || P.state === 'execute';
       const yaw = tg ? angDiff(faceOf(P) + bodyR, Math.atan2(tg.y - P.y, tg.x - P.x)) : 0;
       lookLayer(v, yaw, busy ? 0 : P.state === 'attack' ? 0.35 : 1, dt);
+      hitReact(v, P, faceOf(P) + bodyR, dt);
+      swingLayer(v, dt);
     }
     applyFlinch(v, P, P.face);
     if (P.state !== 'dash') leanLayer(v, P.vx, P.vy, P.face, dt);
@@ -6121,7 +6206,7 @@
       }
     },
     grunt(v, e, p) {
-      const c = GRUNT_CLIPS[e.clip || 0], M = markOf(c);
+      const c = v.gclip || GRUNT_CLIPS[e.clip || 0], M = markOf(c);
       if (e.state === 'rushWind') { const J = markOf('1H_Melee_Attack_Jump_Chop'); scrub(v, '1H_Melee_Attack_Jump_Chop', p, [0, 1], [J[0], J[1] - 0.08], 0.08, v.alt); return; }
       if (e.state === 'rush') { const J = markOf('1H_Melee_Attack_Jump_Chop'); scrub(v, '1H_Melee_Attack_Jump_Chop', p, [0, 1], [J[1] - 0.08, J[2]], 0.02, v.alt); return; }
       if (e.state === 'windup') { // na finta, segura a pose no alto antes de descer
@@ -6184,6 +6269,12 @@
       if (e.state === 'dodge') v.dodgeClip = dodgeClip(e.face, e.vx, e.vy);
       if (e.state === 'stagger') v.hitClip = e.bigHit ? 'Hit_Knockback' : Math.random() < 0.5 ? 'Hit_A' : 'Hit_B';
       if (e.state === 'windup' && e.type === 'grunt' && e.combo > 0) v.alt = !v.alt;
+      if (e.state === 'windup' || e.state === 'staffWind' || e.state === 'bashWind' || e.state === 'rushWind') {
+        const base = e.type === 'grunt' ? GRUNT_CLIPS[e.clip || 0] : null;
+        const vr = base ? pickVariant(base) : null;
+        v.gclip = vr && v.clips[vr[0]] ? vr[0] : null;
+        v.eswR = (vr ? vr[1] : 0) + rand(-0.18, 0.18); v.eswP = (vr ? vr[2] : 0) + rand(-0.06, 0.1);
+      }
     }
     const p = prog(e), def = v.def;
     let tumble = 0;
@@ -6222,6 +6313,9 @@
       const watching = e.state === 'lurk' ? (e.buried ? 0 : 0.6) : ATTACKING.has(e.state) ? 0.4 : 1;
       lookLayer(v, angDiff(faceOf(e) + bodyR, Math.atan2(P.y - e.y, P.x - e.x)), watching, dt);
     }
+    hitReact(v, e, faceOf(e) + bodyR, e.frozenT > 0 ? 0 : dt);
+    if (ATTACKING.has(e.state) || e.state === 'recover') v.swing = [v.eswR || 0, v.eswP || 0, e.state === 'recover' ? Math.max(0, 1 - prog(e)) : Math.min(1, prog(e) * 2 + (e.state === 'active' ? 1 : 0))];
+    swingLayer(v, e.frozenT > 0 ? 0 : dt);
     // enterrado espera sob o chão; o esqueleto sobe com a própria animação de despertar
     v.root.position.y = (e.state === 'lurk' && e.buried ? -v.height * 1.2 : e.state === 'spawn' && !def.undead ? -v.height * 1.05 * (1 - easeOut(p)) : 0) + (e.z || 0) * U;
     if (v.gun && !v.gunInHand) {
@@ -6236,8 +6330,343 @@
     if (tumble) v.tilt.rotation.x += tumble;
     tint(v, e.hitFlash > 0 ? 'flash' : e.frozenT > 0 ? 'frozen' : e.captured > 0 ? 'parry' : e.berserkT > 0 ? 'rage' : e.chillT > 0 ? 'chill' : 'none');
   }
+  // =========================================================================
+  // Física de verdade (Rapier, motor de corpos rígidos em WebAssembly — Apache 2.0)
+  //   · ragdoll: quem morre cai como um corpo, empurrado pela direção e força do golpe
+  //   · armas soltam da mão e caem quicando · destroços voam em explosões e quebras
+  //   · barris, caixotes e baldes soltos pelos cantos: empurrados por corpos, golpes e explosões
+  //   A luta continua no plano (a simulação do jogo); a física cuida de tudo que sobra no mundo.
+  //   Unidades: metros (1 unidade 3D = 1 m; a simulação usa px, U = 1/40).
+  // =========================================================================
+  const PHYS = { ready: false, world: null, R: null, statics: [], chars: new Map(), bodies: [], ragdolls: [], dirty: true, acc: 0 };
+  const PHYS_CAP = { debris: 70, loose: 18 };
+  function physInit() {
+    const R = window.RAPIER;
+    if (!R || PHYS.ready || PHYS.loading) return;
+    PHYS.loading = true;
+    R.init().then(() => {
+      PHYS.R = R;
+      PHYS.world = new R.World({ x: 0, y: -9.81, z: 0 });
+      PHYS.world.timestep = 1 / 60;
+      PHYS.ready = true; PHYS.dirty = true;
+    }).catch((err) => { console.warn('Física indisponível', err); });
+  }
+  physInit();
+  // cenário: chão, bordas e obstáculos viram colisores fixos (refeitos quando o mapa muda)
+  function physRebuildStatic() {
+    const { R, world } = PHYS;
+    for (const c of PHYS.statics) world.removeRigidBody(c);
+    PHYS.statics = [];
+    const fixed = (x, y, z, desc) => { const b = world.createRigidBody(R.RigidBodyDesc.fixed().setTranslation(x, y, z)); world.createCollider(desc.setFriction(0.9).setRestitution(0.1), b); PHYS.statics.push(b); return b; };
+    fixed(0, -0.5, 0, R.ColliderDesc.cuboid(200, 0.5, 200));
+    const hw = ARENA.w / 2 * U, hh = ARENA.h / 2 * U;
+    for (const [x, z, sx, sz] of [[0, -hh - 0.5, hw + 1, 0.5], [0, hh + 0.5, hw + 1, 0.5], [-hw - 0.5, 0, 0.5, hh + 1], [hw + 0.5, 0, 0.5, hh + 1]]) fixed(x, 2, z, R.ColliderDesc.cuboid(sx, 2, sz));
+    for (const ob of OBST) {
+      if (ob.goal && ob.ghp <= 0) continue;
+      const hgt = ob.tall ? 3.4 : ob.barrel ? 1.0 : 1.1;
+      if (ob.c) fixed(ob.x * U, hgt / 2, ob.y * U, R.ColliderDesc.cylinder(hgt / 2, ob.r * U));
+      else fixed(ob.x * U, hgt / 2, ob.y * U, R.ColliderDesc.cuboid(ob.w / 2 * U, hgt / 2, ob.h / 2 * U));
+    }
+  }
+  // personagens vivos = cápsulas cinemáticas (empurram destroços e corpos caídos)
+  function physSyncChars() {
+    const { R, world } = PHYS;
+    const seen = new Set();
+    const put = (ent, r) => {
+      seen.add(ent);
+      let b = PHYS.chars.get(ent);
+      if (!b) { b = world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setTranslation(ent.x * U, 0.9, ent.y * U)); world.createCollider(R.ColliderDesc.capsule(0.55, r * U * 0.9), b); PHYS.chars.set(ent, b); }
+      b.setNextKinematicTranslation({ x: ent.x * U, y: 0.9 + (ent.z || 0) * U, z: ent.y * U });
+    };
+    if (P.state !== 'dead') put(P, P.r);
+    for (const e of G.enemies) if (!e.dead && !e.fly && e.state !== 'lurk') put(e, e.r);
+    for (const [ent, b] of PHYS.chars) if (!seen.has(ent)) { world.removeRigidBody(b); PHYS.chars.delete(ent); }
+  }
+  // ---------- corpos soltos (destroços, armas, objetos) ----------
+  function physAddBody(mesh, desc, o) {
+    const { R, world } = PHYS;
+    const p = mesh.getWorldPosition(new THREE.Vector3()), q = mesh.getWorldQuaternion(new THREE.Quaternion());
+    const bd = R.RigidBodyDesc.dynamic().setTranslation(p.x, p.y, p.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
+      .setLinearDamping(o.ld !== undefined ? o.ld : 0.15).setAngularDamping(o.ad !== undefined ? o.ad : 0.4).setCcdEnabled(!!o.ccd);
+    const b = world.createRigidBody(bd);
+    world.createCollider(desc.setDensity(o.density || 600).setFriction(o.friction !== undefined ? o.friction : 0.8).setRestitution(o.bounce !== undefined ? o.bounce : 0.15), b);
+    if (o.v) b.setLinvel(o.v, true);
+    if (o.w) b.setAngvel(o.w, true);
+    if (mesh.parent !== scene) { mesh.removeFromParent(); scene.add(mesh); }
+    mesh.position.copy(p); mesh.quaternion.copy(q);
+    const rec = { b, mesh, kind: o.kind, life: o.life || Infinity, t: 0, s0: mesh.scale.clone(), dispose: o.dispose };
+    PHYS.bodies.push(rec);
+    return rec;
+  }
+  function physRemove(rec) {
+    PHYS.world.removeRigidBody(rec.b);
+    scene.remove(rec.mesh);
+    if (rec.dispose) rec.mesh.traverse((o) => { if (o.userData.ownGeo && o.geometry) o.geometry.dispose(); if (o.userData.ownMat && o.material) o.material.dispose(); });
+  }
+  const physMat = (k, color) => {
+    const d = MODELS.ready && MODELS.gltf['dungeon.glb'];
+    const m = d && d.mats && d.mats[k];
+    return m || (PHYS['mat_' + k] = PHYS['mat_' + k] || new THREE.MeshStandardMaterial({ color: color || '#777', roughness: 0.85 }));
+  };
+  const debrisGeo = [];
+  function debrisGeometry(i) { return debrisGeo[i] || (debrisGeo[i] = i % 3 === 0 ? new THREE.BoxGeometry(1, 1, 1) : i % 3 === 1 ? new THREE.DodecahedronGeometry(0.6, 0) : new THREE.BoxGeometry(1, 0.35, 0.6)); }
+  // destroços: pedaços de pedra, tábuas ou ferro saindo de (x,y) em px com força 'pow'
+  function physDebris(x, y, kind, n, pow, h) {
+    if (!PHYS.ready || !PHYS.world) return;
+    const mat = physMat(kind === 'wood' ? 'wood' : kind === 'iron' ? 'iron' : kind === 'brass' ? 'iron' : 'dress', '#8a8078');
+    for (let i = 0; i < n; i++) {
+      const gi = Math.floor(Math.random() * 3), s = kind === 'wood' ? rand(0.12, 0.3) : rand(0.08, 0.24);
+      const m = new THREE.Mesh(debrisGeometry(gi), mat);
+      m.scale.set(s * (kind === 'wood' ? 2.6 : 1), s, s * (kind === 'wood' ? 0.5 : 1));
+      m.castShadow = true; m.receiveShadow = true;
+      const a = rand(0, TAU), r0 = rand(0, 0.4);
+      m.position.set(x * U + Math.cos(a) * r0, (h || 0.8) + rand(0, 0.8), y * U + Math.sin(a) * r0);
+      m.rotation.set(rand(0, TAU), rand(0, TAU), rand(0, TAU));
+      scene.add(m);
+      const sp = pow * rand(0.4, 1);
+      const hx = (gi === 1 ? 0.5 : 0.5) * m.scale.x, hy = 0.5 * m.scale.y * (gi === 2 ? 0.35 : 1), hz = 0.5 * m.scale.z * (gi === 2 ? 0.6 : 1);
+      physAddBody(m, gi === 1 ? PHYS.R.ColliderDesc.ball(0.55 * s) : PHYS.R.ColliderDesc.cuboid(hx, hy, hz), {
+        kind: 'debris', life: rand(7, 11), density: kind === 'wood' ? 500 : 2200, bounce: kind === 'iron' ? 0.3 : 0.12,
+        v: { x: Math.cos(a) * sp, y: rand(2, 5) * Math.min(1.6, pow / 5), z: Math.sin(a) * sp }, w: { x: rand(-12, 12), y: rand(-12, 12), z: rand(-12, 12) },
+      });
+    }
+    // limite: os mais antigos somem primeiro
+    const deb = PHYS.bodies.filter((r) => r.kind === 'debris');
+    for (let i = 0; i < deb.length - PHYS_CAP.debris; i++) deb[i].life = Math.min(deb[i].life, deb[i].t + 0.5);
+  }
+  // objetos soltos pelos cantos: baldes, barriletes e caixotes pequenos (mesmos materiais do cenário)
+  function physLooseProps(map) {
+    if (!PHYS.ready) return;
+    let seed = 0; for (const ch of map.id) seed = (seed * 37 + ch.charCodeAt(0)) % 99991;
+    const Rn = seeded(seed + 11);
+    const wood = physMat('wood', '#7a5a40'), iron = physMat('iron', '#3a3634');
+    const n = Math.min(PHYS_CAP.loose, 8 + Math.round((ARENA.w * ARENA.h) / 700000));
+    for (let i = 0, tries = 0; i < n && tries < 200; tries++) {
+      // perto das bordas e das paredes, fora do caminho principal
+      const side = Math.floor(Rn() * 4);
+      const x = side < 2 ? rand(-ARENA.w / 2 + 80, ARENA.w / 2 - 80) : (side === 2 ? -1 : 1) * (ARENA.w / 2 - rand(50, 160));
+      const y = side >= 2 ? rand(-ARENA.h / 2 + 80, ARENA.h / 2 - 80) : (side === 0 ? -1 : 1) * (ARENA.h / 2 - rand(50, 160));
+      if (!freeSpot(x, y, 26) || inLava(x, y, 30) || len(x - P.x, y - P.y) < 200) continue;
+      const kind = Math.floor(Rn() * 3);
+      const g = new THREE.Group();
+      let desc;
+      if (kind === 0) { // barrilete
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.75, 14), wood); m.castShadow = true; m.receiveShadow = true; m.userData.ownGeo = true; g.add(m);
+        for (const hy of [-0.25, 0.25]) { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.05, 14), iron); r.position.y = hy; r.userData.ownGeo = true; g.add(r); }
+        desc = PHYS.R.ColliderDesc.cylinder(0.375, 0.3);
+      } else if (kind === 1) { // caixote
+        const s = rand(0.45, 0.7);
+        const m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), wood); m.castShadow = true; m.receiveShadow = true; m.userData.ownGeo = true; g.add(m);
+        desc = PHYS.R.ColliderDesc.cuboid(s / 2, s / 2, s / 2);
+      } else { // balde de ferro
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.16, 0.34, 12, 1, true), iron); m.castShadow = true; m.userData.ownGeo = true; m.material = iron; g.add(m);
+        desc = PHYS.R.ColliderDesc.cylinder(0.17, 0.19);
+      }
+      g.position.set(x * U, kind === 0 ? 0.4 : kind === 1 ? 0.35 : 0.2, y * U); g.rotation.y = Rn() * TAU;
+      scene.add(g);
+      physAddBody(g, desc, { kind: 'loose', density: kind === 2 ? 900 : 350, dispose: true, ld: 0.3, ad: 0.6 });
+      i++;
+    }
+  }
+  // golpe ou explosão empurra o que estiver solto (x,y em px)
+  function physPush(x, y, face, range, arc, pow, omni) {
+    if (!PHYS.ready) return;
+    for (const r of PHYS.bodies) {
+      const t = r.b.translation(), dx = t.x / U - x, dy = t.z / U - y, d = len(dx, dy);
+      if (d > range + 20) continue;
+      if (!omni && arc < TAU - 0.01 && Math.abs(angDiff(face, Math.atan2(dy, dx))) > arc / 2 + 0.4) continue;
+      const a = omni ? Math.atan2(dy, dx) : face, k = pow * (1 - d / (range + 40)) * r.b.mass();
+      r.b.applyImpulse({ x: Math.cos(a) * k, y: k * 0.45, z: Math.sin(a) * k }, true);
+      r.b.applyTorqueImpulse({ x: rand(-1, 1) * k * 0.05, y: rand(-1, 1) * k * 0.05, z: rand(-1, 1) * k * 0.05 }, true);
+    }
+    for (const rd of PHYS.ragdolls) {
+      const t = rd.parts[0].b.translation(), dx = t.x / U - x, dy = t.z / U - y, d = len(dx, dy);
+      if (d > range + 30) continue;
+      const a = omni ? Math.atan2(dy, dx) : face;
+      for (const p of rd.parts) { const k = pow * 0.6 * p.b.mass(); p.b.applyImpulse({ x: Math.cos(a) * k, y: k * 0.5, z: Math.sin(a) * k }, true); }
+    }
+  }
+  // armas da mão viram corpos soltos quando alguém morre
+  function physDropGear(v, ang, pow) {
+    if (!PHYS.ready || !v.gear || !v.gear.length) return;
+    for (const h of v.gear) {
+      h.updateWorldMatrix(true, true);
+      // caixa no espaço da própria arma (não a caixa alinhada ao mundo, que fica enorme com a arma inclinada)
+      const inv = new THREE.Matrix4().copy(h.matrixWorld).invert(), box = new THREE.Box3(), tmp = new THREE.Box3();
+      h.traverse((o) => { if (!o.isMesh) return; o.geometry.computeBoundingBox(); tmp.copy(o.geometry.boundingBox).applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld)); box.union(tmp); });
+      if (box.isEmpty()) continue;
+      const ws = h.getWorldScale(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3()).multiply(ws), cL = box.getCenter(new THREE.Vector3());
+      const wrap = new THREE.Group(); scene.add(wrap);
+      wrap.position.copy(h.localToWorld(cL.clone())); wrap.quaternion.copy(h.getWorldQuaternion(new THREE.Quaternion()));
+      h.removeFromParent(); wrap.add(h);
+      h.position.copy(cL).multiply(ws).negate(); h.quaternion.identity(); h.scale.copy(ws);
+      physAddBody(wrap, PHYS.R.ColliderDesc.cuboid(Math.max(0.02, sz.x / 2), Math.max(0.02, sz.y / 2), Math.max(0.02, sz.z / 2)).setCollisionGroups((0x0004 << 16) | (0xffff & ~0x0006)), {
+        kind: 'gear', life: 14, density: 2500, bounce: 0.25, ccd: true,
+        v: { x: Math.cos(ang) * pow * 0.5 + rand(-1, 1), y: rand(1.5, 3.5), z: Math.sin(ang) * pow * 0.5 + rand(-1, 1) }, w: { x: rand(-8, 8), y: rand(-8, 8), z: rand(-8, 8) },
+      });
+    }
+    v.gear = [];
+  }
+  // ---------- ragdoll ----------
+  // 11 partes (bacia, peito, cabeça, braços, antebraços, coxas, canelas) ligadas por juntas;
+  // cotovelo e joelho só dobram para um lado. A pose da morte continua de onde a animação parou.
+  const RAG = [
+    ['pelvis', 'spine_02', 0.13, null], ['spine_02', 'neck_01', 0.14, 'pelvis'], ['Head', null, 0.11, 'spine_02'],
+    ['upperarm_l', 'lowerarm_l', 0.055, 'spine_02'], ['lowerarm_l', 'hand_l', 0.045, 'upperarm_l'],
+    ['upperarm_r', 'lowerarm_r', 0.055, 'spine_02'], ['lowerarm_r', 'hand_r', 0.045, 'upperarm_r'],
+    ['thigh_l', 'calf_l', 0.075, 'pelvis'], ['calf_l', 'foot_l', 0.06, 'thigh_l'],
+    ['thigh_r', 'calf_r', 0.075, 'pelvis'], ['calf_r', 'foot_r', 0.06, 'thigh_r'],
+  ];
+  const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _m1 = new THREE.Matrix4();
+  function physRagdoll(v, ang, pow, vel) {
+    if (!PHYS.ready || !v.bones || !v.bones.pelvis || v.ragdoll) return false;
+    const { R, world } = PHYS;
+    v.root.updateMatrixWorld(true);
+    // todas as partes começam com a mesma orientação (a do mundo): assim o eixo de joelho e cotovelo
+    // vale igual para os dois corpos da junta. A cápsula é girada para seguir o osso.
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(v.model.getWorldQuaternion(new THREE.Quaternion())).normalize();
+    const parts = [], byName = {};
+    const GROUP = (0x0002 << 16) | (0xffff & ~0x0002); // partes do corpo não colidem entre si
+    for (const [name, childName, rad, parent] of RAG) {
+      const bone = v.bones[name];
+      if (!bone) return false;
+      const a = bone.getWorldPosition(new THREE.Vector3());
+      const bEnd = childName && v.bones[childName] ? v.bones[childName].getWorldPosition(new THREE.Vector3()) : a.clone().add(new THREE.Vector3(0, 0.22 * v.scale, 0));
+      const mid = a.clone().add(bEnd).multiplyScalar(0.5), L = Math.max(0.05, a.distanceTo(bEnd));
+      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), bEnd.clone().sub(a).normalize());
+      const rad2 = rad * v.scale * (v.def.h / 1.8);
+      const b = world.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation(mid.x, mid.y, mid.z)
+        .setLinearDamping(0.3).setAngularDamping(name === 'Head' ? 3 : 1.8).setCcdEnabled(name === 'pelvis' || name === 'spine_02'));
+      const col = (name === 'Head' ? R.ColliderDesc.ball(rad2 * 1.1) : R.ColliderDesc.capsule(Math.max(0.01, L / 2 - rad2 * 0.5), rad2).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }))
+        .setDensity(name === 'pelvis' || name === 'spine_02' ? 1100 : 900).setFriction(1.1).setRestitution(0.02).setCollisionGroups(GROUP);
+      world.createCollider(col, b);
+      const part = { name, bone, b, off: bone.getWorldQuaternion(new THREE.Quaternion()), a0: a.clone(), mid0: mid.clone(), posOff: a.clone().sub(mid) };
+      parts.push(part); byName[name] = part;
+    }
+    for (const part of parts) {
+      const parentName = RAG.find((r) => r[0] === part.name)[3];
+      if (!parentName) continue;
+      const pp = byName[parentName];
+      const l1 = part.a0.clone().sub(pp.mid0), l2 = part.a0.clone().sub(part.mid0);
+      let jd;
+      if (part.name.startsWith('calf') || part.name.startsWith('lowerarm')) {
+        // joelho dobra para trás, cotovelo para a frente (eixo lateral do corpo)
+        jd = R.JointData.revolute({ x: l1.x, y: l1.y, z: l1.z }, { x: l2.x, y: l2.y, z: l2.z }, { x: right.x, y: right.y, z: right.z });
+        jd.limitsEnabled = true; jd.limits = part.name.startsWith('calf') ? [-0.05, 2.3] : [-2.4, 0.05];
+      } else jd = R.JointData.spherical({ x: l1.x, y: l1.y, z: l1.z }, { x: l2.x, y: l2.y, z: l2.z });
+      world.createImpulseJoint(jd, pp.b, part.b, true);
+    }
+    // o golpe final empurra (mais no tronco), somado à velocidade que o corpo já tinha
+    const push = clamp(pow / 150, 1.1, 4.5);
+    // o golpe acerta o tronco: ele tomba e as pernas vão junto (em vez de o corpo deslizar em pé)
+    for (const part of parts) {
+      const leg = part.name === 'pelvis' || part.name.startsWith('thigh') || part.name.startsWith('calf');
+      const k = part.name === 'Head' ? 1.7 : part.name === 'spine_02' ? 1.45 : part.name.startsWith('upper') || part.name.startsWith('lower') ? 1.1 : leg ? 0.35 : 1;
+      part.b.setLinvel({ x: Math.cos(ang) * push * k + (vel ? clamp(vel.x, -3, 3) * 0.2 : 0), y: (leg ? 0.2 : 0.55) * push * 0.35, z: Math.sin(ang) * push * k + (vel ? clamp(vel.z, -3, 3) * 0.2 : 0) }, true);
+    }
+    // giro de tombo em volta do eixo lateral ao golpe (cima × direção do golpe)
+    const tx = Math.sin(ang), tz = -Math.cos(ang), spin = clamp(push * 0.9, 2, 6);
+    for (const nm of ['pelvis', 'spine_02', 'thigh_l', 'thigh_r']) byName[nm].b.setAngvel({ x: tx * spin + rand(-0.6, 0.6), y: rand(-1.2, 1.2), z: tz * spin + rand(-0.6, 0.6) }, true);
+    v.mixer.stopAllAction();
+    v.tilt.rotation.set(0, 0, 0); v.tilt.position.set(0, 0, 0);
+    v.ragdoll = { parts, t: 0 };
+    PHYS.ragdolls.push(v.ragdoll);
+    return true;
+  }
+  // corpo físico → ossos (em ordem de hierarquia: pais antes dos filhos)
+  function physApplyRagdoll(v) {
+    const rd = v.ragdoll;
+    for (const part of rd.parts) {
+      const t = part.b.translation(), r = part.b.rotation();
+      _q1.set(r.x, r.y, r.z, r.w);
+      const wq = _q1.clone().multiply(part.off); // corpo começou alinhado ao mundo: rotação do corpo × pose inicial do osso
+      const parent = part.bone.parent;
+      parent.updateWorldMatrix(true, false);
+      parent.getWorldQuaternion(_q2);
+      part.bone.quaternion.copy(_q2.invert().multiply(wq));
+      if (part.name === 'pelvis') {
+        _v1.copy(part.posOff).applyQuaternion(_q1).add(_v2.set(t.x, t.y, t.z));
+        part.bone.position.copy(parent.worldToLocal(_v1));
+      }
+      part.bone.updateMatrixWorld(true);
+    }
+  }
+  function physFreeRagdoll(v) {
+    if (!v.ragdoll) return;
+    for (const p of v.ragdoll.parts) PHYS.world.removeRigidBody(p.b);
+    const i = PHYS.ragdolls.indexOf(v.ragdoll); if (i >= 0) PHYS.ragdolls.splice(i, 1);
+    v.ragdoll.freed = true;
+  }
+  function physClear() {
+    if (!PHYS.ready) return;
+    for (const r of PHYS.bodies) physRemove(r);
+    PHYS.bodies = [];
+    for (const rd of PHYS.ragdolls) for (const p of rd.parts) PHYS.world.removeRigidBody(p.b);
+    PHYS.ragdolls = [];
+    for (const [, b] of PHYS.chars) PHYS.world.removeRigidBody(b);
+    PHYS.chars.clear();
+    PHYS.dirty = true;
+  }
+  function physStep(dt) {
+    if (!PHYS.ready || !dt) return;
+    if (PHYS.dirty) { PHYS.dirty = false; physRebuildStatic(); }
+    if (PHYS.looseMap && MODELS.ready) { const m = PHYS.looseMap; PHYS.looseMap = null; physLooseProps(m); }
+    physSyncChars();
+    PHYS.acc = Math.min(PHYS.acc + dt, 0.1);
+    let n = 0;
+    while (PHYS.acc >= 1 / 60 && n < 4) { PHYS.world.step(); PHYS.acc -= 1 / 60; n++; }
+    for (let i = PHYS.bodies.length - 1; i >= 0; i--) {
+      const r = PHYS.bodies[i];
+      r.t += dt;
+      const t = r.b.translation(), q = r.b.rotation();
+      r.mesh.position.set(t.x, t.y, t.z); r.mesh.quaternion.set(q.x, q.y, q.z, q.w);
+      if (t.y < -5) r.life = Math.min(r.life, r.t);
+      if (r.t > r.life - 0.6) { const k = Math.max(0.001, (r.life - r.t) / 0.6); r.mesh.scale.copy(r.s0).multiplyScalar(k); }
+      if (r.t >= r.life) { physRemove(r); PHYS.bodies.splice(i, 1); }
+    }
+  }
+  // Reação física ao golpe: o tronco é empurrado na direção do impacto e volta como uma mola
+  const REACT_CHAIN = [['spine_01', 0.18], ['spine_02', 0.3], ['spine_03', 0.26], ['neck_01', 0.1], ['Head', 0.16]];
+  const _rax = new THREE.Vector3();
+  function hitReact(v, ent, bodyFace, dt) {
+    if (!v.bones || !v.bones.spine_02) return;
+    const hr = v.hr || (v.hr = { ax: 0, az: 0, vx: 0, vz: 0, seq: ent.hitSeq || 0 });
+    if ((ent.hitSeq || 0) !== hr.seq) {
+      hr.seq = ent.hitSeq || 0;
+      const rel = angDiff(bodyFace, ent.flinchA || 0), k = clamp((ent.hitPow || 200) / 240, 0.45, 2.4);
+      const dz = Math.cos(rel), dx = -Math.sin(rel); // direção do empurrão no espaço do modelo
+      hr.vx += dz * k * 7; hr.vz += -dx * k * 7;       // eixo = cima × direção
+    }
+    const K = 150, C = 15;
+    hr.vx += (-K * hr.ax - C * hr.vx) * dt; hr.vz += (-K * hr.az - C * hr.vz) * dt;
+    hr.ax += hr.vx * dt; hr.az += hr.vz * dt;
+    const mag = Math.hypot(hr.ax, hr.az);
+    if (mag < 0.002) return;
+    for (const [name, w] of REACT_CHAIN) {
+      const b = v.bones[name];
+      if (!b || !b.parent) continue;
+      modelQuat(b.parent, v.model, _lq).invert();
+      _rax.set(hr.ax / mag, 0, hr.az / mag).applyQuaternion(_lq);
+      b.quaternion.premultiply(_lq2.setFromAxisAngle(_rax, Math.min(0.9, mag) * w * 2.2));
+    }
+  }
   function animateCorpse(v, dt) {
     v.deadT += dt;
+    if (v.isModel && (v.ragdoll || (!v.died && PHYS.ready))) {
+      if (!v.died) {
+        v.died = true;
+        physDropGear(v, v.deathAng || 0, clamp((v.deathPow || 250) / 90, 2, 6));
+        if (!physRagdoll(v, v.deathAng || 0, v.deathPow || 250, v.deathVel)) onceAnim(v, v.def.undead ? 'Death_C_Skeletons' : 'Death_A', 1, 0.08);
+      }
+      if (v.ragdoll && !v.ragdoll.freed) {
+        physApplyRagdoll(v);
+        if (v.deadT > 6) physFreeRagdoll(v); // assentou: o corpo congela na pose em que caiu
+      }
+      if (!v.ragdoll) v.mixer.update(dt);
+      v.root.position.y = -Math.max(0, v.deadT - 7) * 0.5;
+      tint(v, 'none');
+      return v.deadT > 9;
+    }
     if (v.isModel) {
       if (!v.died) { v.died = true; onceAnim(v, v.def.undead ? 'Death_C_Skeletons' : 'Death_A', 1, 0.08); }
       v.mixer.update(dt);
@@ -6294,7 +6723,9 @@
     for (const v of menuViews) disposeView(v);
     menuViews = [];
     playerView.deadT = 0;
+    if (playerView.ragdoll) { if (!playerView.ragdoll.freed) physFreeRagdoll(playerView); playerView.ragdoll = null; if (playerView.gear && !playerView.gear.length) setHeroWeapons(playerView); }
     if (playerView.isModel) { playerView.mixer.stopAllAction(); playerView.cur = null; playerView.key = null; }
+    physClear();
   }
   // Botão de jogar espera os modelos (ou a falha deles) para não trocar de visual no meio da luta
   {
@@ -6482,6 +6913,7 @@
   function updateSlashes(px, pz) {
     let i = 0;
     for (const s of G.slashes) {
+      if (PHYS.pTrail && !s.big && !s.heavy) continue;
       const m = slashMesh(i++);
       const p = clamp(s.t / (s.dur - 0.1), 0, 1);
       const fade = s.t > s.dur - 0.1 ? Math.max(0, 1 - (s.t - (s.dur - 0.1)) / 0.22) : 1;
@@ -6512,6 +6944,61 @@
     for (; i < slashPool.length; i++) slashPool[i].visible = false;
   }
 
+  // Rastro da lâmina: fita presa à ponta e à base da arma de verdade (segue o ângulo real de cada golpe)
+  const TRAIL_N = 12;
+  function trailMesh() {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL_N * 2 * 3), 3));
+    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(TRAIL_N * 2 * 3), 3));
+    const idx = [];
+    for (let k = 0; k < TRAIL_N - 1; k++) { const a = k * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    g.setIndex(idx);
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+    m.frustumCulled = false; m.userData.ownMat = true;
+    scene.add(m);
+    return m;
+  }
+  const _tp = new THREE.Vector3(), _tb = new THREE.Vector3(), _tc = new THREE.Color();
+  function bladeTrail(v, on, color, dt) {
+    const h = v.gear && v.gear.find((q) => q.userData.tip);
+    if (!h) { if (v.trail) v.trail.mesh.visible = false; return false; }
+    const tr = v.trail || (v.trail = { pts: [], mesh: trailMesh() });
+    for (const p of tr.pts) p.age += dt;
+    if (on) {
+      h.updateWorldMatrix(true, false);
+      _tp.copy(h.userData.tip); h.localToWorld(_tp);
+      _tb.copy(h.userData.base); h.localToWorld(_tb);
+      tr.pts.unshift({ t: _tp.clone(), b: _tb.clone(), age: 0 });
+    }
+    while (tr.pts.length > TRAIL_N || (tr.pts.length && tr.pts[tr.pts.length - 1].age > 0.14)) tr.pts.pop();
+    const m = tr.mesh;
+    if (tr.pts.length < 2) { m.visible = false; return true; }
+    const pos = m.geometry.attributes.position.array, col = m.geometry.attributes.color.array;
+    _tc.set(color);
+    for (let k = 0; k < TRAIL_N; k++) {
+      const p = tr.pts[Math.min(k, tr.pts.length - 1)], o = k * 6;
+      const w = k < tr.pts.length ? 0.7 * Math.pow(1 - k / TRAIL_N, 1.8) * Math.max(0, 1 - p.age / 0.14) : 0;
+      pos[o] = p.b.x; pos[o + 1] = p.b.y; pos[o + 2] = p.b.z;
+      pos[o + 3] = p.t.x; pos[o + 4] = p.t.y; pos[o + 5] = p.t.z;
+      col[o] = _tc.r * w * 0.15; col[o + 1] = _tc.g * w * 0.15; col[o + 2] = _tc.b * w * 0.15;
+      col[o + 3] = _tc.r * w; col[o + 4] = _tc.g * w; col[o + 5] = _tc.b * w;
+    }
+    m.geometry.attributes.position.needsUpdate = true; m.geometry.attributes.color.needsUpdate = true;
+    m.visible = true;
+    return true;
+  }
+  function updateBladeTrails(dt) {
+    const v = playerView;
+    let pOn = false, pCol = '#cfe6ff';
+    if (P.state === 'attack' && P.atk) { const a = P.atk; pOn = P.t >= a.wind * 0.6 && P.t <= a.wind + a.active + 0.06 && !a.cast; if (a.finisher || a.launch) pCol = '#ffe0a8'; }
+    else if (P.state === 'heavy' && P.hv) { const H = P.hv; pOn = P.t >= H.wind * 0.7 && P.t <= H.wind + H.active + 0.06 && !H.cast; pCol = '#ffc07a'; }
+    else if (P.state === 'special' || P.state === 'execute') { pOn = true; pCol = '#ffb070'; }
+    PHYS.pTrail = v && v.isModel && !v.ragdoll ? bladeTrail(v, pOn, pCol, dt) : false;
+    for (const [e, ev] of views) {
+      if (!ev.isModel || !ev.gear) continue;
+      bladeTrail(ev, e.state === 'active' || e.state === 'staff' || e.state === 'rush' || e.state === 'bash' || e.state === 'spin', e.boss ? '#ff8a4a' : '#ffb0a0', dt);
+    }
+  }
   // Partículas (faíscas / fragmentos)
   const PMAX = 900;
   const pGeo = new THREE.BufferGeometry();
@@ -7091,6 +7578,7 @@
     if (g) buildDungeonEnv(map, g); else buildSimpleEnv(map);
     buildDecor(map);
     rune.visible = !!map.rune;
+    physClear(); PHYS.looseMap = map;
     setTier(PERF.tier);
   }
 
@@ -8100,7 +8588,10 @@
       if (alive.has(e)) continue;
       views.delete(e);
       if (v.tele) for (const k in v.tele) v.tele[k].visible = false;
-      if (e.dead && !v.custom) { v.deadT = 0; if (v.isModel) tint(v, 'none'); else setFlash(v, false); corpses.push(v); }
+      if (e.dead && !v.custom) {
+        v.deadT = 0; v.deathAng = e.flinchA || e.face + Math.PI; v.deathPow = e.hitPow || 260; v.deathVel = { x: e.vx * U, z: e.vy * U };
+        if (v.isModel) tint(v, 'none'); else setFlash(v, false); corpses.push(v);
+      }
       else disposeView(v); // máquinas explodem (partículas já saíram na morte)
     }
     for (let i = corpses.length - 1; i >= 0; i--) {
@@ -8108,6 +8599,8 @@
       if (animateCorpse(v, adt)) { disposeView(v); corpses.splice(i, 1); }
     }
 
+    physStep(adt);
+    updateBladeTrails(adt || rdt);
     // efeitos
     updateSlashes(plx, plz);
     updateParticles();
@@ -8848,7 +9341,9 @@
 
   // Gancho para testes automatizados (index.html?debug)
   if (/[?&]debug\b/.test(location.search)) window.__LR = {
-    G, P, CAMPAIGN, CHAPTERS, CAPS, SAVE: () => SAVE, OBJ, goalTargets, curGoal, startChapter, startTrial, makeEnemy, step, STEP, cineAdvance, triggerEncounter, chooseRelic, openRelicChoice,
+    G, P, CAMPAIGN, CHAPTERS, CAPS, SAVE: () => SAVE, OBJ, goalTargets, curGoal,
+    PHYS, physRagdoll, physStep,
+    physInfo: () => ({ ready: PHYS.ready, bodies: PHYS.bodies.length, kinds: PHYS.bodies.map((r) => r.kind).join(','), ragdolls: PHYS.ragdolls.map((rd) => rd.parts.map((p) => { const t = p.b.translation(); return p.name + ':' + t.x.toFixed(2) + ',' + t.y.toFixed(2) + ',' + t.z.toFixed(2); }).filter((_, i) => [0, 2, 8].includes(i)).join(' ')), statics: PHYS.statics.length, chars: PHYS.chars.size }), startChapter, startTrial, makeEnemy, step, STEP, cineAdvance, triggerEncounter, chooseRelic, openRelicChoice,
     zoom: (d) => { CAMERA.dist = d; }, CAMERA, PERF: () => PERF, toggleLock, OBST: () => OBST, HAZ: () => HAZ, COVER: () => COVER, freeSpot, hasLOS, findPath, inObstacle, inLava, TYPES,
     HEROES, WEAPONS, SPECIALS, READ, STYLE, CAMFX, resetPlayer, tryAction, startSpecial, damageEnemy, openFigueira, heroOpen, views: () => views, playerView: () => playerView,
     setHero: (h, w) => { SAVE.hero = h; if (w) SAVE.weaponOf[h] = w; },

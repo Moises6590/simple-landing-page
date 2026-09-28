@@ -203,7 +203,7 @@
       <h2>LÂMINA CINZA</h2>
       <p class="sub">Fim de <i>As Cinzas de Ferrumbra</i>.</p>
       <p>Obrigado por jogar.</p>
-      <p class="small">Personagens, animações e armas: Quaternius (CC0) · Texturas e rochas do cenário: Poly Haven (CC0) · Motor 3D: Three.js (MIT)</p>
+      <p class="small">Personagens, animações e armas: Quaternius (CC0) · Texturas e rochas do cenário: Poly Haven (CC0) · Motor 3D: Three.js (MIT) · Física: Rapier (Apache 2.0)</p>
       <p class="small">Música: Kevin MacLeod (incompetech.com), licença Creative Commons: By Attribution 4.0 —
         “Echoes of Time v2”, “Long Note Four”, “Anguish”, “Lightless Dawn”, “Heroic Age”, “Oppressive Gloom”, “Dark Walk”, “The Descent”,
         “Shadowlands 4 - Breath”, “Clash Defiant”, “Volatile Reaction”, “Crusade - Heavy Industry”, “Five Armies”, “Unholy Knight”,
@@ -220,7 +220,8 @@
     {
       "imports": {
         "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+        "@dimforge/rapier3d-compat": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/rapier.es.js"
       }
     }
   </script>
@@ -237,7 +238,9 @@
     import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
     import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
     import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+    import RAPIER from '@dimforge/rapier3d-compat';
     window.THREE = THREE;
+    window.RAPIER = RAPIER;
     window.THREE_EXTRAS = { GLTFLoader, MeshoptDecoder, SkeletonUtils, EffectComposer, RenderPass, UnrealBloomPass, OutputPass, ShaderPass, GTAOPass, RGBELoader };
     const s = document.createElement('script');
     s.src = 'game.js';

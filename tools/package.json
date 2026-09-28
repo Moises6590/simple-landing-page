@@ -9,12 +9,13 @@
     "android": "node standalone.mjs android && cd android && npm install && (test -d android || npm run prepare-android) && npx cap sync android && node ../icon/make.mjs && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.14.0",
     "@gltf-transform/core": "^4.5.0",
     "@gltf-transform/extensions": "^4.5.0",
     "@gltf-transform/functions": "^4.5.0",
     "esbuild": "^0.28.2",
     "meshoptimizer": "^1.3.0",
-    "three": "0.160.0",
-    "sharp": "^0.34.0"
+    "sharp": "^0.34.0",
+    "three": "0.160.0"
   }
 }

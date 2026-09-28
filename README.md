@@ -187,3 +187,15 @@ node standalone.mjs desktop && cd desktop-lite && node build.mjs && npx @neutral
   - quem está de emboscada fica agachado, e golpe pesado joga o inimigo para trás com a reação de impacto.
 - A segunda fase de Vezmir sempre acontece, mesmo com golpes muito fortes.
 
+### Build 13: física real, golpes em vários ângulos e lutas menores
+
+- **Motor de física (Rapier)** rodando junto com o jogo:
+  - **Ragdoll:** quem morre cai como um corpo de verdade. São 11 partes ligadas por juntas (joelho e cotovelo só dobram para um lado), e o corpo é empurrado na direção e na força do golpe final. O herói também cai assim.
+  - **Armas soltam da mão** e caem quicando no chão.
+  - **Destroços** de pedra, madeira, ferro e latão voam em explosões, barris de pólvora, colunas que tombam, Bombardas e peças de objetivo quebradas.
+  - **Objetos soltos** pelos cantos (barriletes, caixotes e baldes) são empurrados por quem passa, por golpes e por explosões.
+- **Reação física ao golpe:** o tronco é empurrado na direção exata do impacto e volta como uma mola. Golpe de frente, de lado ou por trás dá uma reação diferente.
+- **Golpes em vários ângulos:** cada golpe do combo sorteia entre três ou quatro variações (outro trecho de captura mais uma inclinação do tronco e do ombro que muda o plano do corte: diagonal alta, horizontal, de cima, de baixo), sem repetir a anterior. Os inimigos também variam.
+- **Rastro da lâmina real:** o brilho do corte agora é uma fita presa à ponta e à base da arma, então acompanha o ângulo verdadeiro de cada golpe.
+- **Lutas menores:** cada encontro tem no máximo quatro inimigos no começo e um reforço depois. No máximo dois atacam ao mesmo tempo (os outros rodeiam). O sino e as colmeias levantam no máximo dois por vez, e as ondas da Provação ficaram menores.
+

@@ -88,3 +88,7 @@ reconhecimento de fala e os que tinham fala foram descartados). Cortadas, com si
 
 Os sons CC BY-SA 4.0 (VoiceBosch) continuam sob a mesma licença dentro do jogo.
 
+## Física — Rapier (dimforge.com) · Apache 2.0
+- `@dimforge/rapier3d-compat` 0.14: motor de corpos rígidos em WebAssembly. Faz os ragdolls, as armas que caem,
+  os destroços e os objetos soltos. Carregado da jsDelivr na versão web e embutido nos pacotes.
+

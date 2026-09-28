@@ -9,5 +9,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import RAPIER from '@dimforge/rapier3d-compat';
 window.THREE = THREE;
+window.RAPIER = RAPIER; // física (corpos, destroços, ragdoll)
 window.THREE_EXTRAS = { GLTFLoader, SkeletonUtils, EffectComposer, RenderPass, UnrealBloomPass, OutputPass, ShaderPass, GTAOPass, RGBELoader };
