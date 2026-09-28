@@ -308,7 +308,7 @@
   // =========================================================================
   const Input = {
     keys: new Set(),
-    held: { attack: false, heavy: false, parry: false, dash: false, jump: false, pull: false, sp1: false, sp2: false, bomb: false, rage: false, heal: false },
+    held: { attack: false, heavy: false, parry: false, dash: false, jump: false, pull: false, anjo: false, demonio: false, shoot: false, sp1: false, sp2: false, bomb: false, rage: false, heal: false },
     stick: { x: 0, y: 0, active: false, id: null, ox: 0, oy: 0 },
     mouse: { x: 0, y: 0, aim: false },
     buffer: { act: null, t: 0 },
@@ -322,10 +322,10 @@
 
   const KEYMAP = {
     KeyJ: 'attack', KeyZ: 'attack',
-    KeyK: 'heavy', KeyX: 'heavy',
+    KeyK: 'heavy', KeyX: 'shoot',
     Space: 'jump', KeyI: 'jump', ShiftLeft: 'dash', ShiftRight: 'dash', KeyU: 'pull', KeyO: 'pull',
-    KeyL: 'parry', KeyE: 'parry', KeyC: 'parry',
-    Tab: 'lock', KeyT: 'lock', KeyR: 'rage', KeyH: 'heal', KeyV: 'heal', Digit3: 'heal',
+    KeyL: 'parry', KeyE: 'parry', KeyC: 'anjo',
+    Tab: 'lock', KeyT: 'lock', KeyR: 'rage', KeyH: 'heal', KeyV: 'demonio', Digit3: 'heal',
     KeyQ: 'sp1', Digit1: 'sp1', KeyF: 'sp2', Digit2: 'sp2', KeyG: 'bomb', Digit4: 'bomb',
   };
   // Câmera em terceira pessoa (a simulação é no plano; yaw = ângulo para onde a câmera olha)
@@ -921,7 +921,7 @@
     combo: 0, comboT: 0,
     slowT: 0, slowScale: 1,
     trauma: 0, hurtFlash: 0,
-    enemies: [], projectiles: [], particles: [], texts: [], orbs: [], slashes: [], ghosts: [], chains: [], rings: [],
+    enemies: [], projectiles: [], particles: [], texts: [], orbs: [], slashes: [], ghosts: [], chains: [], streaks: [], rings: [],
     lobs: [], fonts: [], embers: [], codexSeen: {},
     mode: 'campaign', // campaign | trial (Provação das Cinzas: ondas infinitas)
     spawnQueue: [], spawnT: 0, waveDelay: 0, maxAlive: 5, maxMelee: 2, maxRanged: 1, maxDrone: 2,
@@ -1192,6 +1192,7 @@
     relics: [], mods: null, flasks: 3, maxFlasks: 3, flaskFill: 0, bonusHp: 0, crownUsed: false, fontProg: 0, lavaT: 0,
     bombs: 2, riposteT: 0, riposteE: null, guardT: 0, spec: null, veilT: 0, furyT: 0, stanceT: 0, grabbed: null, heldBy: null,
     vz: 0, air: false, airJumps: 0, airDashes: 0, airBudget: 0, hangT: 0, followT: 0, followE: null, followNext: null, airIdx: -1, airWindow: 0, landT: 0, pullE: null, pullCd: 0, flip: 0, flipT: 0,
+    mode: null, modeIdx: -1, modeOf: null, shotT: 0, shotHand: 1, multiT: 0, quaked: false,
   };
   // relics/bonusHp vêm do início do capítulo (checkpoint); start = posição inicial do mapa
   function resetPlayer(relics, bonusHp, start) {
@@ -1215,6 +1216,7 @@
       hv: HEAVY, lock: null, rage: 0, sinceDash: 9, atkKind: 'combo', execTarget: null, execDone: false, pulse: 0,
       riposteT: 0, riposteE: null, guardT: 0, spec: null, veilT: 0, furyT: 0, stanceT: 0, grabbed: null, heldBy: null, blockHitT: 0,
       vz: 0, air: false, airJumps: 0, airDashes: 0, airBudget: 0, hangT: 0, followT: 0, followE: null, followNext: null, airIdx: -1, airWindow: 0, landT: 0, pullE: null, pullCd: 0, flip: 0, flipT: 0,
+      mode: null, modeIdx: -1, modeOf: null, shotT: 0, shotHand: 1, multiT: 0, quaked: false,
     });
     P.hitSet.clear();
     if (typeof onHeroChanged === 'function') onHeroChanged();
@@ -1277,10 +1279,10 @@
 
   // ---------- Medidor de estilo ----------
   const STYLE_RANKS = [
-    { at: 0, name: 'D', word: 'DESPERTA', color: '#9aa3b5', mult: 1 }, { at: 80, name: 'C', word: 'CERTEIRA', color: '#8fd3ff', mult: 1.1 },
-    { at: 170, name: 'B', word: 'BRAVA', color: '#6ef08a', mult: 1.25 }, { at: 290, name: 'A', word: 'ARDENTE', color: '#ffe27a', mult: 1.45 },
-    { at: 440, name: 'S', word: 'SELVAGEM', color: '#ff9a3c', mult: 1.7 }, { at: 620, name: 'SS', word: 'SANGUINÁRIA', color: '#ff5a3c', mult: 2.0 },
-    { at: 830, name: 'SSS', word: 'SUPREMA BRASA', color: '#ff2f4a', mult: 2.4 },
+    { at: 0, name: 'D', word: 'DESPERTA', color: '#9aa3b5', mult: 1 }, { at: 60, name: 'C', word: 'CERTEIRA', color: '#8fd3ff', mult: 1.1 },
+    { at: 140, name: 'B', word: 'BRAVA', color: '#6ef08a', mult: 1.25 }, { at: 240, name: 'A', word: 'ARDENTE', color: '#ffe27a', mult: 1.45 },
+    { at: 360, name: 'S', word: 'SELVAGEM', color: '#ff9a3c', mult: 1.7 }, { at: 540, name: 'SS', word: 'SANGUINÁRIA', color: '#ff5a3c', mult: 2.0 },
+    { at: 720, name: 'SSS', word: 'SUPREMA BRASA', color: '#ff2f4a', mult: 2.4 },
   ];
   const STYLE = { pts: 0, last: [], rank: 0, peak: 0, sum: 0, time: 0 };
   function styleRank() { let r = 0; for (let i = 0; i < STYLE_RANKS.length; i++) if (STYLE.pts >= STYLE_RANKS[i].at) r = i; return r; }
@@ -1292,13 +1294,15 @@
     }
     STYLE.pts = Math.min(1000, STYLE.pts + pts);
     const r = styleRank();
+    if (r > STYLE.rank && r >= 4) STYLE.big = { r, t: 0 }; // S, SS e SSS entram grandes no meio da tela
     if (r > STYLE.rank) { STYLE.flash = 0.6; if (r >= 3) { addText(P.x, P.y - 52, STYLE_RANKS[r].word + '!', STYLE_RANKS[r].color, r >= 5 ? 22 : 17); Sound.play(r >= 5 ? 'supreme' : 'uiok'); } }
     STYLE.rank = r; STYLE.peak = Math.max(STYLE.peak, r);
   }
   function styleTick(dt) {
     if (STYLE.flash > 0) STYLE.flash -= dt;
+    if (STYLE.big) { STYLE.big.t += dt; if (STYLE.big.t > 1.1) STYLE.big = null; }
     if (G.state !== 'play') return;
-    STYLE.pts = Math.max(0, STYLE.pts - (6 + STYLE.pts * 0.05) * dt);
+    STYLE.pts = Math.max(0, STYLE.pts - (6 + STYLE.pts * 0.06) * dt);
     STYLE.rank = styleRank();
     STYLE.sum += STYLE.rank * dt; STYLE.time += dt;
   }
@@ -1399,6 +1403,8 @@
       if (P.heldBy && !P.heldBy.dead) { P.heldBy.st -= 0.16; addText(P.x, P.y - 30, '!', '#ffe27a', 14); }
       return true;
     }
+    if (act === 'anjo' || act === 'demonio') return true;
+    if (act === 'shoot') { heroShot(); return true; }
     if (act === 'jump') return tryJump(mv);
     if (act === 'pull') return tryPull(mv);
     if (P.air) return airAction(act, mv);
@@ -1406,6 +1412,7 @@
       if (P.riposteT > 0 && P.riposteE && !P.riposteE.dead) { startAttack(P.set.riposte, mv, P.riposteE); P.riposteT = 0; return true; }
       const ex = execTarget(mv);
       if (ex) { startExecute(ex); return true; }
+      if (P.mode) return modeAttack(mv);
       if (P.set.air) { const at = airTarget(mv, P.set.air.range + 40); if (at) { startAttack(P.set.air, mv, at); return true; } }
       if (P.state === 'dash' || P.sinceDash < 0.18) { startAttack(P.set.dash, mv); return true; }
       // Aurel: inimigo colado leva um empurrão do cajado em vez de magia
@@ -1419,6 +1426,10 @@
       if (P.comboIdx === 1 && P.state === 'idle' && P.comboPause > 0.22 && P.comboWindow > 0 && P.set.delayed) { startAttack(P.set.delayed, mv); P.comboIdx = -1; return true; }
       const next = cont && P.comboIdx >= 0 ? (P.comboIdx + 1) % chain.length : 0;
       startAttack(chain[next], mv); P.comboIdx = next;
+      return true;
+    }
+    if (act === 'heavy' && P.mode && canAttackNow()) { // pesado do modo: Redemoinho (anjo) ou Tremor (demônio)
+      startAttack((P.mode === 'anjo' ? ANJO : DEMONIO).heavy, mv); P.modeIdx = -1; P.comboIdx = -1; P.comboWindow = 0; P.st -= 12; P.stDelay = 0.6;
       return true;
     }
     if (act === 'heavy' && canAttackNow() && P.st >= PL.heavyCost) {
@@ -1510,9 +1521,9 @@
     { const vr = pickVariant(a.clip); P.atkClip = vr[0]; P.atkRoll = vr[1] * (Math.random() < 0.5 ? 1 : 0.8); P.atkPitch = vr[2]; }
     const aim = forced ? { ang: Math.atan2(forced.y - P.y, forced.x - P.x), target: forced, dist: len(forced.x - P.x, forced.y - P.y) } : aimAssist(mv, a.range);
     P.state = 'attack'; P.t = 0; P.atk = a; P.confirm = false; P.actionId++;
-    P.atkKind = a === P.set.dash ? 'dash' : (a === P.set.l1 || a === P.set.l2 || a === P.set.l3 || a === P.set.l4) ? 'combo' : 'special';
+    P.atkKind = a === P.set.dash ? 'dash' : (a === P.set.l1 || a === P.set.l2 || a === P.set.l3 || a === P.set.l4 || a.modeOf) ? 'combo' : 'special';
     if (a.name) addText(P.x, P.y - 30, a.name, a.riposte ? '#ffe27a' : '#8fd3ff', 13);
-    P.lunged = false; P.hitSet.clear(); P.casted = false;
+    P.lunged = false; P.hitSet.clear(); P.casted = false; P.multiT = 0; P.multiN = 0; P.quaked = false;
     P.swingSide = a.side || (P.comboIdx === 0 ? -1 : 1);
     P.face = aim.ang;
     P.atkTarget = aim.target;
@@ -1699,6 +1710,8 @@
   }
   // no ar: ataque = combo aéreo · pesado = mergulho · esquiva = impulso no ar
   function airAction(act, mv) {
+    if (act === 'attack' && canAttackNow() && P.mode === 'anjo') { startAttack(ANJO.air, mv); P.airIdx = 0; return true; }
+    if (act === 'attack' && canAttackNow() && P.mode === 'demonio' && P.state !== 'dive') { startDive(mv); return true; }
     if (act === 'attack' && canAttackNow()) {
       const A = airMoves(P.set);
       const cont = (P.state === 'attack' && P.atk && P.atk.aerial) || P.airWindow > 0;
@@ -1724,10 +1737,10 @@
   function startDive(mv) {
     const aim = aimAssist(mv, 200);
     P.state = 'dive'; P.t = 0; P.actionId++; P.threat = { id: ++threatId, kind: 'heavy', range: DIVE.radius, arc: TAU };
-    P.diveGo = false; P.diveHit = false; P.diveH = P.z; P.hitSet.clear();
+    P.diveGo = false; P.diveHit = false; P.diveH = P.z; P.hitSet.clear(); P.diveFire = P.mode === 'demonio';
     P.diveE = aim.target; if (aim.target) P.face = aim.ang;
     P.vz = 140; P.vx *= 0.2; P.vy *= 0.2;
-    addText(P.x, P.y - 34, 'RACHA-CÉU', '#ffb070', 14);
+    addText(P.x, P.y - 34, P.diveFire ? 'QUEDA DE FOGO' : 'RACHA-CÉU', '#ffb070', 14);
     heroVoice('big', { chance: 0.9 });
   }
   function diveStep(dt) {
@@ -1760,14 +1773,15 @@
     }
   }
   function diveImpact() {
-    const h = P.diveH || 0, k = 1 + clamp(h / 260, 0, 1) * 0.6, R = DIVE.radius * (0.9 + clamp(h / 260, 0, 1) * 0.4);
+    const h = P.diveH || 0, fire = !!P.diveFire, k = (1 + clamp(h / 260, 0, 1) * 0.6) * (fire ? 1.25 : 1), R = DIVE.radius * (0.9 + clamp(h / 260, 0, 1) * 0.4) * (fire ? 1.3 : 1);
+    if (fire) { fxq('boom', P.x, P.y, R); for (let q = 0; q < 10; q++) { const an = q / 10 * TAU; streak(P.x + Math.cos(an) * R * 0.45, P.y + Math.sin(an) * R * 0.45, 8, an, 0, R * 0.9, 18, '255,120,40', 0.3); } }
     P.diveHit = true; P.t = 0; P.actionId++;
     for (const e of G.enemies) {
       if (!targetable(e) || e.state === 'lurk' || P.hitSet.has(e)) continue;
       const dx = e.x - P.x, dy = e.y - P.y, d = len(dx, dy);
       if (d > R + e.r || (e.z || 0) > 90) continue;
       P.hitSet.add(e);
-      damageEnemy(e, playerDmg(DIVE.dmg * k * (d < P.r + e.r + 30 ? 1.3 : 1)), Math.atan2(dy, dx), 460, DIVE.poise * P.mods.poise, { stop: 0.07, heavy: true, slam: true, knockdown: true, move: 'racha_ceu' });
+      damageEnemy(e, playerDmg(DIVE.dmg * k * (d < P.r + e.r + 30 ? 1.3 : 1)), Math.atan2(dy, dx), 460, DIVE.poise * P.mods.poise, { stop: 0.07, heavy: true, slam: true, knockdown: true, move: fire ? 'queda_fogo' : 'racha_ceu', demon: fire });
     }
     hitProps(P.x, P.y, 0, R, TAU, DIVE.dmg * k, true, true);
     shake(0.55); vibrate(35); Sound.play('slam'); Sound.play('boom');
@@ -1853,7 +1867,7 @@
     if (!P.pullDone && P.t >= 0.09) {
       P.pullDone = true;
       if (e.type === 'shield' && e.guardBrokenT <= 0) { e.guardBrokenT = 2.6; e.poise = 0; addText(e.x, e.y - e.r - 26, 'ESCUDO ARRANCADO', '#ffe27a', 14); }
-      if (heavyBody(e)) { // o herói vai até ele
+      if (heavyBody(e) || P.mode === 'anjo') { // o herói vai até ele (modo anjo: sempre)
         P.pullZip = true; P.iframe = Math.max(P.iframe, PULL.time);
         const d = len(e.x - P.x, e.y - P.y), need = Math.max(0, d - (P.r + e.r + 20));
         P.vx = Math.cos(P.face) * need / PULL.time; P.vy = Math.sin(P.face) * need / PULL.time;
@@ -1881,6 +1895,132 @@
       if (P.ghostT <= 0) { P.ghostT = 0.025; G.ghosts.push({ x: P.x, y: P.y, z: P.z, r: P.r, face: P.face, life: 0.2, max: 0.2, color: '255,200,120' }); }
     } else { P.vx *= Math.exp(-10 * dt); P.vy *= Math.exp(-10 * dt); }
     if (P.t >= 0.09 + PULL.time + 0.06 && !P.pullZip) { P.state = P.air ? 'jump' : 'idle'; P.t = 0; P.actionId++; if (P.air) { P.airIdx = -1; P.airWindow = 0.4; } }
+  }
+  // =========================================================================
+  // Modos segurados no meio do combo (como no vídeo de referência: a arma troca a cada golpe)
+  //   ANJO (azul): foice de brasa fria — giros largos, muitos acertos, puxa para o centro, segura no ar
+  //   DEMÔNIO (laranja): machado de fogo — lento, pesado, cada acerto explode, o último racha o chão
+  //   TIRO: disparos rápidos de brasa que mantêm o inimigo suspenso
+  // =========================================================================
+  const ANJO = {
+    a: [
+      { id: 'an1', name: 'FOICE', clip: '2H_Melee_Attack_Spinning', wind: 0.05, active: 0.17, rec: 0.13, dmg: 6, range: 98, arc: TAU, kb: -70, lunge: 150, poise: 8, stop: 0.02, angel: true, multi: 0.085 },
+      { id: 'an2', clip: '2H_Melee_Attack_Spin', wind: 0.05, active: 0.17, rec: 0.13, dmg: 6, range: 98, arc: TAU, kb: -70, lunge: 150, poise: 8, stop: 0.02, angel: true, multi: 0.085 },
+      { id: 'an3', clip: '2H_Melee_Attack_Spinning', wind: 0.05, active: 0.2, rec: 0.14, dmg: 6, range: 104, arc: TAU, kb: -80, lunge: 150, poise: 9, stop: 0.02, angel: true, multi: 0.08 },
+      { id: 'an4', name: 'HÉLICE', clip: '2H_Melee_Attack_Spin', wind: 0.07, active: 0.3, rec: 0.26, dmg: 6, range: 112, arc: TAU, kb: 30, lunge: 60, poise: 14, stop: 0.03, angel: true, multi: 0.075, launch: 440, finisher: true },
+    ],
+    heavy: { id: 'redemoinho', name: 'REDEMOINHO', clip: '2H_Melee_Attack_Spin', wind: 0.1, active: 0.6, rec: 0.3, dmg: 5, range: 124, arc: TAU, kb: -130, lunge: 0, poise: 10, stop: 0.02, angel: true, multi: 0.075 },
+    air: { id: 'an_ar', clip: '2H_Melee_Attack_Spinning', wind: 0.04, active: 0.18, rec: 0.14, dmg: 6, range: 92, arc: TAU, kb: 10, lunge: 90, poise: 8, stop: 0.02, angel: true, multi: 0.08, aerial: true },
+  };
+  const DEMONIO = {
+    a: [
+      { id: 'dm1', name: 'MACHADO', clip: 'Great_A', wind: 0.16, active: 0.1, rec: 0.3, dmg: 20, range: 94, arc: 2.2, kb: 280, lunge: 280, poise: 60, stop: 0.1, demon: true, fire: 55 },
+      { id: 'dm2', clip: 'Great_B', wind: 0.18, active: 0.1, rec: 0.32, dmg: 22, range: 94, arc: 2.0, kb: 300, lunge: 280, poise: 70, stop: 0.1, demon: true, fire: 55, side: 1 },
+      { id: 'dm3', name: 'TERREMOTO', clip: '2H_Melee_Attack_Chop', wind: 0.22, active: 0.12, rec: 0.4, dmg: 30, range: 112, arc: 1.6, kb: 640, lunge: 300, poise: 120, stop: 0.14, demon: true, fire: 60, quake: 140, knockdown: true, finisher: true },
+    ],
+    heavy: { id: 'tremor', name: 'TREMOR', clip: '2H_Melee_Attack_Chop', wind: 0.3, active: 0.12, rec: 0.45, dmg: 34, range: 120, arc: 1.4, kb: 620, lunge: 200, poise: 150, stop: 0.15, demon: true, fire: 70, quake: 170, knockdown: true, finisher: true, guardBreak: true },
+  };
+  const SHOT = { every: 0.1, dmg: 2.6, range: 560 };
+  function setMode(m) {
+    if (P.mode === m) return;
+    const was = P.mode; P.mode = m;
+    if (m && G.state === 'play') {
+      Sound.play(m === 'anjo' ? 'blink' : 'pickup');
+      starBurst(P.x, P.y, P.z + 50, m === 'anjo' ? '150,205,255' : '255,130,50', 5, 34, 0.14);
+      if (was && was !== m) styleAdd(8, 'troca');
+    }
+  }
+  function modeAttack(mv) {
+    const set = P.mode === 'anjo' ? ANJO : DEMONIO;
+    const chain = set.a;
+    const cont = (P.state === 'attack' && P.atk && P.atk.modeOf === P.mode) || (P.comboWindow > 0 && P.modeIdx >= 0 && P.modeOf === P.mode);
+    const next = cont ? (P.modeIdx + 1) % chain.length : 0;
+    const a = chain[next]; a.modeOf = P.mode;
+    startAttack(a, mv); P.modeIdx = next; P.modeOf = P.mode; P.comboIdx = -1;
+    return true;
+  }
+  // um acerto do machado de fogo explode em volta do alvo
+  function fireHit(e, a) {
+    const R = a.fire;
+    fxq('boom', e.x, e.y, R); burst(e.x, e.y, 0, 14, '#ffb03c', 320, true);
+    starBurst(e.x, e.y, (e.z || 0) + 40, '255,140,50', 7, 70, 0.16);
+    for (const o of G.enemies) {
+      if (o === e || !targetable(o) || P.hitSet.has(o) || o.state === 'lurk') continue;
+      if (len(o.x - e.x, o.y - e.y) > R + o.r) continue;
+      P.hitSet.add(o);
+      damageEnemy(o, playerDmg(a.dmg * 0.4), Math.atan2(o.y - e.y, o.x - e.x), 360, a.poise * 0.5, { stop: 0.02, heavy: true, move: a.id + '_fogo', demon: true });
+    }
+  }
+  // último golpe do machado: racha o chão à frente com uma onda de fogo
+  function quakeHit(a) {
+    const cx = P.x + Math.cos(P.face) * a.range * 0.6, cy = P.y + Math.sin(P.face) * a.range * 0.6, R = a.quake;
+    shake(0.5); vibrate(30); Sound.play('slam'); Sound.play('boom');
+    G.rings.push({ x: cx, y: cy, r: 12, max: R + 20, t: 0, dur: 0.34, color: '255,120,40' });
+    G.rings.push({ x: cx, y: cy, r: 6, max: R * 0.6, t: 0, dur: 0.24, color: '255,220,160' });
+    fxq('boom', cx, cy, R); fxq('dust', cx, cy, R);
+    for (let k = 0; k < 8; k++) { const an = k / 8 * TAU; streak(cx + Math.cos(an) * R * 0.45, cy + Math.sin(an) * R * 0.45, 8, an, 0, R * 0.9, 16, '255,120,40', 0.28); }
+    for (const e of G.enemies) {
+      if (!targetable(e) || P.hitSet.has(e) || e.state === 'lurk' || (e.z || 0) > 80) continue;
+      const d = len(e.x - cx, e.y - cy);
+      if (d > R + e.r) continue;
+      P.hitSet.add(e);
+      damageEnemy(e, playerDmg(a.dmg * 0.6), Math.atan2(e.y - cy, e.x - cx), 460, a.poise * 0.7, { stop: 0.04, heavy: true, knockdown: true, move: a.id + '_chao', demon: true });
+    }
+    hitProps(cx, cy, 0, R, TAU, a.dmg, true, true);
+    if (typeof physPush === 'function') physPush(cx, cy, R + 40, 4);
+  }
+  // disparo: acerto imediato com rastro vermelho; no ar, segura o alvo suspenso
+  function shootTarget() {
+    const L = P.lock && !P.lock.dead && targetable(P.lock) ? P.lock : null;
+    if (L && len(L.x - P.x, L.y - P.y) < SHOT.range) return L;
+    let best = null, bs = Infinity;
+    for (const e of G.enemies) {
+      if (!targetable(e) || e.state === 'lurk' || e.state === 'spawn') continue;
+      const dx = e.x - P.x, dy = e.y - P.y, d = len(dx, dy);
+      if (d > SHOT.range) continue;
+      const ad = Math.abs(angDiff(P.face, Math.atan2(dy, dx)));
+      if (ad > 0.7) continue;
+      if (!hasLOS(P.x, P.y, e.x, e.y, 3)) continue;
+      const s = d + ad * 300 - (e.state === 'air' ? 160 : 0);
+      if (s < bs) { bs = s; best = e; }
+    }
+    return best;
+  }
+  const canShootNow = () => P.state === 'idle' || P.state === 'jump' || P.state === 'guard' || (P.state === 'attack' && afterStrike(P.atk, WHIFF_LOCK)) || (P.state === 'dash' && P.t >= dashT() * 0.5) || P.state === 'airdash';
+  function heroShot() {
+    if ((P.shotT || 0) > 0 || !canShootNow()) return false;
+    P.shotT = SHOT.every; P.shotHand = -(P.shotHand || 1);
+    const e = shootTarget();
+    if (e) P.face = Math.atan2(e.y - P.y, e.x - P.x);
+    if (P.state === 'attack') { P.state = P.air ? 'jump' : 'idle'; P.threat = null; }
+    const side = P.face + P.shotHand * 0.5;
+    const hx = P.x + Math.cos(side) * 12, hy = P.y + Math.sin(side) * 12, hz = P.z + 48;
+    let tx, ty, tz;
+    if (e) { tx = e.x; ty = e.y; tz = (e.z || 0) + (e.fly ? 10 : 42); }
+    else { tx = P.x + Math.cos(P.face) * 420; ty = P.y + Math.sin(P.face) * 420; tz = hz; }
+    const dx = tx - hx, dy = ty - hy, dz = tz - hz, dh = len(dx, dy);
+    streak((hx + tx) / 2, (hy + ty) / 2, (hz + tz) / 2, Math.atan2(dy, dx), Math.atan2(dz, dh), Math.hypot(dh, dz), 7, '255,80,55', 0.09);
+    starBurst(hx + Math.cos(P.face) * 10, hy + Math.sin(P.face) * 10, hz, '255,200,120', 3, 16, 0.06);
+    Sound.play('bolt');
+    if (e) {
+      damageEnemy(e, playerDmg(SHOT.dmg), Math.atan2(e.y - P.y, e.x - P.x), 18, 3, { stop: 0.001, move: 'tiro', shot: true, quiet: true });
+      starBurst(e.x, e.y, tz, '255,110,70', 3, 22, 0.08);
+    }
+    if (P.air && P.airBudget > 0 && P.vz < 0) { P.vz = Math.max(P.vz, -40); } // atirar no ar freia a queda
+    return true;
+  }
+  // ---------- Rastros de luz (tiros, estrelas de impacto, pilares do lançador) ----------
+  // x, y (plano), h (altura, px), ang (direção no plano), pitch, len e w (px), color 'r,g,b', dur (s)
+  function streak(x, y, h, ang, pitch, len_, w, color, dur) {
+    if (G.streaks.length > 110) G.streaks.shift();
+    G.streaks.push({ x, y, h, ang, pitch, len: len_, w, color, t: 0, dur });
+  }
+  function starBurst(x, y, h, color, n, size, dur) {
+    const a0 = Math.random() * TAU, ry = CAMERA.yaw + Math.PI / 2; // raios no plano da tela
+    for (let k = 0; k < n; k++) {
+      const pa = a0 + k / n * TAU + rand(-0.2, 0.2), L = size * rand(0.6, 1.2), c = Math.cos(pa), sn = Math.sin(pa);
+      streak(x + Math.cos(ry) * c * L * 0.5, y + Math.sin(ry) * c * L * 0.5, h + sn * L * 0.5, ry + (c < 0 ? Math.PI : 0), Math.asin(clamp(sn, -1, 1)), L, Math.max(4, size * 0.16), color, dur || 0.12);
+    }
   }
   function startParry(mv) {
     let best = null, bd = 260;
@@ -2120,6 +2260,9 @@
     P.iframe -= dt; P.dashCd -= dt; P.parryT -= dt; P.comboWindow -= dt; P.stDelay -= dt;
     P.followT -= dt; P.airWindow -= dt; P.landT -= dt; P.pullCd -= dt; P.flipT += dt;
     if (P.followT <= 0) P.followE = null;
+    if (P.state !== 'dead') setMode(Input.held.anjo ? 'anjo' : Input.held.demonio ? 'demonio' : null);
+    P.shotT -= dt;
+    if (Input.held.shoot && P.state !== 'dead') heroShot();
     if (P.state === 'idle' && P.comboWindow > 0) P.comboPause += dt; else if (P.state !== 'idle') P.comboPause = 0;
     if (P.stDelay <= 0) P.st = Math.min(P.maxSt, P.st + (P.state === 'guard' ? 14 : 40) * dt);
     readDecay(dt);
@@ -2219,7 +2362,7 @@
           if (a.cast) castSpell(a, a.cast);
           else {
             Sound.play(a.riposte ? 'crit' : 'swing');
-            G.slashes.push({ side: P.swingSide, face: P.face, arc: Math.min(a.arc, TAU), range: a.range, t: 0, dur: a.active + 0.1, heavy: a.arc >= TAU, big: !!a.finisher });
+            if (!a.angel) G.slashes.push({ side: P.swingSide, face: P.face, arc: Math.min(a.arc, TAU), range: a.range, t: 0, dur: a.active + 0.1, heavy: a.arc >= TAU, big: !!a.finisher, col: a.angel ? '#9fd8ff' : a.demon ? '#ff8a3c' : null });
             if (a.finisher && P.mods.amber) {
               G.projectiles.push({ kind: 'wave', x: P.x + Math.cos(P.face) * 30, y: P.y + Math.sin(P.face) * 30, px: P.x, py: P.y,
                 vx: Math.cos(P.face) * 620, vy: Math.sin(P.face) * 620, r: 16, dmg: 18, life: 0.55, friendly: true, owner: null, dead: false, pierce: new Set() });
@@ -2227,6 +2370,14 @@
           }
           if (a.remote && P.atkTarget) remoteStrike(a, P.atkTarget);
         }
+        if (a.multi && P.t >= a.wind && P.t < aEnd) { // giro de vários acertos
+          P.multiT -= dt;
+          if (P.multiT <= 0) {
+            P.multiT = a.multi; P.hitSet.clear(); P.multiN = (P.multiN || 0) + 1;
+            if (a.angel) { const tl = rand(-0.4, 0.4); G.rings.push({ x: P.x, y: P.y, r: a.range * 0.5, max: a.range + 14, t: 0, dur: 0.22, color: '150,205,255', h: P.z + 36 + rand(-8, 8), tilt: tl }, { x: P.x, y: P.y, r: a.range * 0.3, max: a.range * 0.8, t: 0, dur: 0.16, color: '235,245,255', h: P.z + 40, tilt: tl * 0.6 }); if (P.multiN % 2) Sound.play('swing'); }
+          }
+        }
+        if (a.quake && !P.quaked && P.t >= a.wind + a.active * 0.5) { P.quaked = true; quakeHit(a); }
         if (!a.cast && !a.remote && P.t >= a.wind && P.t < aEnd) attackHits(a);
         if (a.stinger && P.t >= a.wind * 0.5 && P.t < aEnd + 0.05) { P.ghostT -= dt; if (P.ghostT <= 0) { P.ghostT = 0.018; G.ghosts.push({ x: P.x, y: P.y, z: P.z, r: P.r, face: P.face, life: 0.28, max: 0.28, color: '255,90,60' }); } }
         if (a.hop && !P.air) P.z = Math.sin(clamp(P.t / (aEnd + 0.08), 0, 1) * Math.PI) * 40 * a.hop;
@@ -2492,8 +2643,10 @@
       if (a.aerial && Math.abs((e.z || 0) - P.z) > (e.state === 'air' || e.fly ? 85 : 64 + (e.boss ? 40 : 0))) continue;
       P.hitSet.add(e);
       const lau = a.aerial ? (!a.airFinish && e.state !== 'air' ? 380 : 0) : a.launch;
-      if (damageEnemy(e, playerDmg(a.dmg), ang, a.kb, a.poise * P.mods.poise, { stop: a.stop, finisher: a.finisher, launch: lau, slam: a.slam, knockdown: a.knockdown || (a.airFinish && e.state !== 'air'), guardBreak: a.guardBreak, move: a.id, riposte: a.riposte, juggle: !!a.aerial, airFinish: !!a.airFinish })) {
+      if (damageEnemy(e, playerDmg(a.dmg), ang, a.kb, a.poise * P.mods.poise, { stop: a.stop, finisher: a.finisher, launch: lau, slam: a.slam, knockdown: a.knockdown || (a.airFinish && e.state !== 'air'), guardBreak: a.guardBreak, move: a.id, riposte: a.riposte, juggle: !!a.aerial, airFinish: !!a.airFinish, angel: a.angel, demon: a.demon, quiet: a.multi && P.multiN > 1 })) {
         P.confirm = true;
+        if (a.fire) fireHit(e, a);
+        if (lau && e.state === 'air') streak(e.x, e.y, (e.z || 0) + 70, P.face, Math.PI / 2, 190, 18, '255,150,60', 0.24); // pilar do lançador
         if (a.aerial && !a.airFinish) { P.hangT = Math.max(P.hangT, 0.34); P.vz = Math.max(P.vz, 20); }
         if (a.launch && !a.aerial && e.state === 'air') { // lançou: saltar agora (ou segurar o pesado) vai atrás
           P.followE = e; P.followT = 0.6;
@@ -3933,7 +4086,7 @@
     dmg = Math.round(dmg);
     e.hp -= dmg;
     if (e.boss && e.phase === 1) e.hp = Math.max(e.hp, e.maxHp * 0.54); // a segunda fase sempre acontece
-    e.hitFlash = 0.1;
+    e.hitFlash = o.quiet ? 0.03 : 0.1;
     if (e.hp > 0 && !e.isStatic) enemyVoice(e, 'hurt', { chance: e.bigHit || crit ? 0.8 : 0.45, gap: 0.2 });
     e.flinchT = FLINCH_TIME; e.flinchA = ang; e.flinchK = o.heavy || o.finisher ? 1.6 : 1;
     const km = e.isStatic ? 0 : kb / e.mass;
@@ -3946,6 +4099,7 @@
     if (e.state === 'air') {
       if (o.slam) { e.vz = -1100; e.slammed = true; e.hangT = 0; styleAdd(30, 'cravar'); }
       else if (o.airFinish) { e.vz = -560; e.slammed = true; e.hangT = 0; }
+      else if (o.shot) { if (e.vz < 20) e.vz = Math.max(e.vz * 0.3, 0); e.hangT = Math.max(e.hangT || 0, 0.22); }
       else if (o.juggle) { e.vz = 50; e.hangT = 0.5; e.vx *= 0.35; e.vy *= 0.35; } // fica suspenso à frente do herói
       else if (fromP) e.vz = Math.max(e.vz, 330); // malabarismo: golpes no ar mantêm o corpo lá em cima
     } else if (o.launch && light && e.state !== 'grabbed' && e.state !== 'thrown') {
@@ -3969,7 +4123,8 @@
     burst(e.x, e.y, ang, crit ? 14 : 8, crit ? '#ffe27a' : e.color, crit ? 380 : 300);
     fxq(TYPES[e.type].undead ? 'bone' : 'hit', e.x - Math.cos(ang) * e.r * 0.5, e.y - Math.sin(ang) * e.r * 0.5);
     if (crit) fxq('hit', e.x, e.y, '#ffe27a');
-    addText(e.x + rand(-8, 8), e.y - e.r - 10, crit ? dmg + '!' : String(dmg), crit ? '#ffe27a' : '#ffffff', crit ? 19 : 14);
+    if (!o.quiet) addText(e.x + rand(-8, 8), e.y - e.r - 10, crit ? dmg + '!' : String(dmg), crit ? '#ffe27a' : '#ffffff', crit ? 19 : 14);
+    if (fromP && !o.quiet) { const big = o.heavy || o.finisher || crit; starBurst(e.x, e.y, (e.z || 0) + 40, o.angel ? '150,205,255' : o.demon ? '255,130,40' : crit ? '255,230,150' : '255,205,165', big ? 6 : 3, big ? 64 : 34, 0.1); }
     Sound.play(crit || o.finisher || o.heavy ? 'crit' : TYPES[e.type].undead ? 'bone' : 'hit', e.x, e.y);
     if ((crit || o.heavy) && TYPES[e.type].undead) Sound.play('bone', e.x, e.y);
     if (o.lava) { if (e.hp <= 0) { e.lavaKill = true; killEnemy(e, ang); } return true; }
@@ -4879,6 +5034,8 @@
     sweep(G.ghosts, liveP);
     for (const r of G.rings) r.t += dt;
     sweep(G.rings, (r) => r.t < r.dur);
+    for (const q of G.streaks) q.t += dt;
+    sweep(G.streaks, (q) => q.t < q.dur);
   }
 
   // =========================================================================
@@ -5669,7 +5826,7 @@
   const ASSET_BASE = 'assets/';
   // Página autocontida: modelos (JSON) e texturas (data URI) podem vir embutidos em window.__ASSETS
   const EMBED = window.__ASSETS || null;
-  const BUILD = 'build 14 · voo, combos aéreos e estilo SSS';
+  const BUILD = 'build 15 · anjo e demônio, tiros e estilo SSS';
   const ANIM_FILE = 'h/anims_h.glb';
   // texturas fotográficas do cenário (m = metros cobertos por uma repetição) e rochas escaneadas
   const ENV_TEX = {
@@ -6404,6 +6561,8 @@
       else if (mode === 'frozen') { m.emissive.set('#7ac8ff'); m.emissiveIntensity = 0.75; }
       else if (mode === 'fury') { m.emissive.set('#ff4a1a'); m.emissiveIntensity = 0.14; }
       else if (mode === 'supreme') { m.emissive.set('#ff8a3a'); m.emissiveIntensity = 0.2; }
+      else if (mode === 'angel') { m.emissive.set('#5ab4ff'); m.emissiveIntensity = 0.07; }
+      else if (mode === 'demon') { m.emissive.set('#ff5a1a'); m.emissiveIntensity = 0.08; }
       else if (mode === 'chill') { m.emissive.set('#5aa8e0'); m.emissiveIntensity = 0.25; }
       else { m.emissive.copy(m.userData.e0); m.emissiveIntensity = m.userData.ei0; }
     }
@@ -6518,7 +6677,7 @@
       if (a < TAU - 0.01) { v.tilt.rotation.x += a; v.tilt.position.y += hc * (1 - Math.cos(a)); v.tilt.position.z -= hc * Math.sin(a); }
     }
     tint(v, P.state === 'stance' ? 'parry' : P.parryT > 0 ? 'parry' : P.state === 'charge' && P.chargeLv > 1 ? 'charge' + P.chargeLv
-      : P.state === 'special' && P.spec && P.spec.def.supreme ? 'supreme' : P.furyT > 0 ? 'fury'
+      : P.state === 'special' && P.spec && P.spec.def.supreme ? 'supreme' : P.furyT > 0 ? 'fury' : P.mode === 'anjo' ? 'angel' : P.mode === 'demonio' ? 'demon'
       : (P.iframe > 0 && P.state === 'hurt' && Math.floor(G.time * 20) % 2 === 0 ? 'flash' : 'none'));
   }
   function specialAnim(v) {
@@ -7307,7 +7466,7 @@
         const start = s.face - s.side * s.arc / 2, end = start + s.side * s.arc * easeOut(p);
         a0 = Math.min(start, end); a1 = Math.max(start, end); lead = s.side > 0 ? 1 : 0;
       }
-      _c.set(s.heavy ? (s.lv === 3 ? '#ff7a3c' : '#ffc98a') : s.big ? '#ffe7b0' : '#8cc8ff');
+      _c.set(s.col || (s.heavy ? (s.lv === 3 ? '#ff7a3c' : '#ffc98a') : s.big ? '#ffe7b0' : '#8cc8ff'));
       const r1 = s.range * 0.3 * U, r2 = (s.range + (s.big ? 8 : 2)) * U;
       const h = s.heavy ? 0.95 : 1.3;
       const pos = m.geometry.attributes.position.array, col = m.geometry.attributes.color.array;
@@ -7421,6 +7580,38 @@
       new THREE.MeshBasicMaterial({ color: '#5ab0ff', transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false }));
     return m;
   });
+  // rastros de luz: dois planos cruzados ao longo do eixo (visíveis de qualquer ângulo)
+  const streakTex = canvasTex(64, (g, S) => {
+    const gy = g.createLinearGradient(0, 0, 0, S);
+    gy.addColorStop(0, 'rgba(255,255,255,0)'); gy.addColorStop(0.42, 'rgba(255,255,255,0.9)'); gy.addColorStop(0.5, 'rgba(255,255,255,1)'); gy.addColorStop(0.58, 'rgba(255,255,255,0.9)'); gy.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gy; g.fillRect(0, 0, S, S);
+    g.globalCompositeOperation = 'destination-in';
+    const gx = g.createLinearGradient(0, 0, S, 0);
+    gx.addColorStop(0, 'rgba(0,0,0,0)'); gx.addColorStop(0.2, 'rgba(0,0,0,1)'); gx.addColorStop(0.8, 'rgba(0,0,0,1)'); gx.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gx; g.fillRect(0, 0, S, S);
+  });
+  const streakPool = pool(() => {
+    const g = new THREE.Group(), pg = geo('streakQ', () => new THREE.PlaneGeometry(1, 1));
+    for (let k = 0; k < 2; k++) {
+      const m = new THREE.Mesh(pg, new THREE.MeshBasicMaterial({ map: streakTex, color: '#fff', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+      if (k) m.rotation.x = Math.PI / 2;
+      g.add(m);
+    }
+    g.rotation.order = 'YZX';
+    return g;
+  });
+  function drawStreaks() {
+    streakPool.begin();
+    for (const q of G.streaks) {
+      const m = streakPool.next(), p = q.t / q.dur, f = 1 - p;
+      m.position.set(q.x * U, q.h * U, q.y * U);
+      m.rotation.set(0, -q.ang, q.pitch);
+      const w = q.w * U * (0.35 + 0.65 * f);
+      m.scale.set(q.len * U * (0.6 + 0.4 * easeOut(Math.min(1, p * 4))), w, w);
+      for (const c of m.children) { c.material.color.set(`rgb(${q.color})`); c.material.opacity = Math.min(1, f * 1.4); }
+    }
+    streakPool.end();
+  }
   // corrente (puxar): elos de ferro em brasa entre a mão e o alvo
   const CHAIN_MAX = 240;
   const chainMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.05, 0.05, 0.1),
@@ -9024,10 +9215,11 @@
     }
     ghostPool.end();
     drawChains();
+    drawStreaks();
     ringPool.begin();
     for (const r of G.rings) {
       const m = ringPool.next(), p = r.t / r.dur, rr = lerp(r.r, r.max, easeOut(p)) * U;
-      m.position.set(r.x * U, 0.06, r.y * U);
+      m.position.set(r.x * U, 0.06 + (r.h || 0) * U, r.y * U); m.rotation.x = r.tilt || 0;
       m.scale.set(rr, 1, rr);
       m.material.color.set(`rgb(${r.color})`);
       m.material.opacity = 1 - p;
@@ -9244,11 +9436,20 @@
       ctx.strokeText(R.name, 0, 0); ctx.fillStyle = R.color; ctx.fillText(R.name, 0, 0);
       ctx.restore();
       ctx.font = 'italic 900 12px system-ui, sans-serif'; ctx.fillStyle = R.color;
-      if (STYLE.pts > 12) ctx.fillText(R.word, W - rightPad, y0 + 16);
+      if (STYLE.pts > 12) ctx.fillText(R.word + '!' + (G.combo > 1 ? '  x' + G.combo : ''), W - rightPad, y0 + 16);
       const f = nx ? clamp((STYLE.pts - R.at) / (nx.at - R.at), 0, 1) : 1;
       bar(W - rightPad - 90, y0 + 22, 90, 4, f, R.color, 'rgba(255,255,255,0.12)');
       ctx.font = '700 10px system-ui, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.55)';
       ctx.fillText('ESTILO' + (R.mult > 1 ? ' · pontos x' + R.mult : ''), W - rightPad, y0 + 36);
+    }
+    if (STYLE.big) { // nível novo entra grande e sai deslizando
+      const B = STYLE.big, R = STYLE_RANKS[B.r], k = B.t < 0.12 ? B.t / 0.12 : 1, out = B.t > 0.8 ? (B.t - 0.8) / 0.3 : 0;
+      ctx.save(); ctx.globalAlpha = (1 - out) * 0.95; ctx.translate(W * 0.74 + out * 60, H * 0.36); ctx.scale(2.2 - 1.2 * k, 2.2 - 1.2 * k);
+      ctx.textAlign = 'center'; ctx.font = `italic 900 ${Math.min(96, W * 0.12)}px system-ui, sans-serif`;
+      ctx.shadowColor = R.color; ctx.shadowBlur = 24; ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.strokeText(R.name, 0, 0); ctx.fillStyle = R.color; ctx.fillText(R.name, 0, 0);
+      ctx.font = 'italic 900 16px system-ui, sans-serif'; ctx.shadowBlur = 8; ctx.fillStyle = '#fff'; ctx.fillText(R.word + '!', 0, 26);
+      ctx.restore();
     }
     if (G.brechaT > 0) { ctx.textAlign = 'center'; ctx.font = '900 16px system-ui, sans-serif'; ctx.fillStyle = '#b8dcff'; ctx.fillText('BRECHA', W / 2, H * 0.22); }
     if (G.banner.t > 0) {
@@ -9344,7 +9545,7 @@
     Object.assign(G, {
       state: 'play', mode, time: 0, wave: 0, score: 0, kills: 0, parries: 0, bestCombo: 0, execs: 0, dmgTaken: 0,
       combo: 0, comboT: 0, slowT: 0, slowScale: 1, trauma: 0, hurtFlash: 0, noHit: true, bossDeadT: 0,
-      enemies: [], projectiles: [], particles: [], texts: [], orbs: [], slashes: [], ghosts: [], chains: [], rings: [], lobs: [],
+      enemies: [], projectiles: [], particles: [], texts: [], orbs: [], slashes: [], ghosts: [], chains: [], streaks: [], rings: [], lobs: [],
       spawnQueue: [], spawnT: 0, waveDelay: 0, dirT: 0, overT: -1, run: { embers: [] }, codexSeen: G.codexSeen || {},
       banner: { text: '', sub: '', t: 0 },
       corpses: [], blades: [], cinzas: 0, brechaT: 0, worldRev: 0, fxq: [],

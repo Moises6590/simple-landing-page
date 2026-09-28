@@ -214,3 +214,16 @@ Movimentos estudados num vídeo de combos de ação, usado só como referência 
 - **Estocada relâmpago:** esquiva e pesado logo depois atravessam a sala até o alvo.
 - **Estilo em sete níveis:** D Desperta, C Certeira, B Brava, A Ardente, S Selvagem, SS Sanguinária e SSS Suprema Brasa. O nível pulsa quando sobe. Golpes no ar e combinações variadas rendem mais.
 - A câmera sobe junto com o herói no ar.
+
+### Build 15: mais perto do vídeo — Anjo e Demônio, tiros e faíscas
+
+Revisão quadro a quadro do vídeo de referência (3 quadros por segundo). O que faltava entrou assim:
+
+- **Trocar de arma no meio do combo:** segurar um botão muda o golpe na hora.
+  - **Anjo** (`C` segurado, botão ANJO): uma foice de brasa fria. Faz giros largos com vários acertos por golpe, puxa os inimigos para perto e deixa anéis azuis inclinados no ar. O 4º golpe (**Hélice**) lança todo mundo em volta. O pesado (**Redemoinho**) gira no lugar e suga os inimigos. No ar, os giros seguram o inimigo. Com a corrente, leva você até o inimigo.
+  - **Demônio** (`V` segurado, botão DEMÔNIO): um machado de fogo. É lento e pesado, e cada acerto explode em volta do alvo. O 3º golpe (**Terremoto**) racha o chão à frente com uma onda de fogo. O pesado (**Tremor**) quebra a guarda. No ar, o ataque vira **Queda de Fogo**.
+  - Trocar de modo entre os golpes rende estilo extra.
+- **Tiros** (`X` segurado, botão TIRO): disparos rápidos de brasa com rastro vermelho. Acertam na hora, podem ser dados andando ou no ar e mantêm o inimigo suspenso.
+- **Faíscas em estrela** a cada golpe: azuis no Anjo, laranja no Demônio, douradas no crítico. O lançador deixa um **pilar de fogo** vertical.
+- **Medidor de estilo** mais rápido, como no vídeo (SSS em uns 15 s de combo variado). Mostra "PALAVRA! x combo", e ao chegar em S, SS e SSS a letra entra grande no meio da tela.
+- Teclas mudaram: `C` e `V` agora são os modos (aparar continua em `L`/`E` e Seiva em `H`/`3`), e `X` é tiro (pesado continua em `K` e no botão direito do mouse).

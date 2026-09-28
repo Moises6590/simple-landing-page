@@ -295,7 +295,13 @@ body:not(.playing) #objective, body.cine #objective { opacity: 0; }
 
 /* ---------- build 7: especiais, bomba, Figueira ---------- */
 .tbtn[data-act="sp1"]  { right: calc(182px + env(safe-area-inset-right)); bottom: calc(168px + env(safe-area-inset-bottom)); }
-.tbtn[data-act="sp2"]  { right: calc(262px + env(safe-area-inset-right)); bottom: calc(132px + env(safe-area-inset-bottom)); }
+.tbtn[data-act="sp2"]  { right: calc(252px + env(safe-area-inset-right)); bottom: calc(182px + env(safe-area-inset-bottom)); }
+.tbtn[data-act="anjo"]    { right: calc(268px + env(safe-area-inset-right)); bottom: calc(100px + env(safe-area-inset-bottom)); }
+.tbtn[data-act="anjo"] span { color: #9fd8ff; }
+.tbtn[data-act="demonio"] { right: calc(334px + env(safe-area-inset-right)); bottom: calc(100px + env(safe-area-inset-bottom)); }
+.tbtn[data-act="demonio"] span { color: #ff8a3c; }
+.tbtn[data-act="shoot"]   { right: calc(104px + env(safe-area-inset-right)); bottom: calc(252px + env(safe-area-inset-bottom)); }
+.tbtn[data-act="shoot"] span { color: #ff6a50; }
 .tbtn[data-act="bomb"] { right: calc(370px + env(safe-area-inset-right)); bottom: calc(22px + env(safe-area-inset-bottom)); }
 .tbtn[data-act="bomb"] span { color: #ffb03c; }
 .tbtn[data-act="sp1"] span, .tbtn[data-act="sp2"] span { color: #ffcf8a; }
