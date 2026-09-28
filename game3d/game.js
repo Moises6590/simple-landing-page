@@ -927,14 +927,14 @@
     b1: { id: 'lanca', name: 'LANÇAR', clip: '2H_Melee_Attack_Slice', wind: 0.12, active: 0.1, rec: 0.3, dmg: 12, range: 72, arc: 1.8, kb: 60, lunge: 260, poise: 30, stop: 0.06, launch: 660 },
     b2: { id: 'quebra', name: 'QUEBRA-GUARDA', clip: 'Block_Attack', wind: 0.1, active: 0.1, rec: 0.3, dmg: 10, range: 64, arc: 1.7, kb: 540, lunge: 440, poise: 95, stop: 0.08, guardBreak: true },
     b3: { id: 'estocada', name: 'ESTOCADA', clip: '1H_Melee_Attack_Stab', wind: 0.14, active: 0.12, rec: 0.34, dmg: 30, range: 140, arc: 0.7, kb: 600, lunge: 640, poise: 60, stop: 0.08, pierce: true, finisher: true },
-    dash: { id: 'investida', name: 'INVESTIDA', clip: '1H_Melee_Attack_Stab', wind: 0.05, active: 0.1, rec: 0.26, dmg: 16, range: 86, arc: 1.2, kb: 430, lunge: 560, poise: 30, stop: 0.06 },
+    dash: { id: 'investida', name: 'INVESTIDA', clip: 'Sword_Lunge', wind: 0.05, active: 0.1, rec: 0.26, dmg: 16, range: 86, arc: 1.2, kb: 430, lunge: 560, poise: 30, stop: 0.06 },
     air: { id: 'martelada', name: 'MARTELADA', clip: '1H_Melee_Attack_Jump_Chop', wind: 0.16, active: 0.1, rec: 0.34, dmg: 24, range: 96, arc: 1.8, kb: 200, lunge: 420, poise: 60, stop: 0.1, slam: true, air: true, hop: 1.1 },
     riposte: { id: 'resposta', name: 'RESPOSTA', clip: '1H_Melee_Attack_Stab', wind: 0.05, active: 0.1, rec: 0.3, dmg: 40, range: 120, arc: 1.3, kb: 520, lunge: 700, poise: 200, stop: 0.13, riposte: true, finisher: true },
     charge: { clip: '2H_Melee_Attack_Spin', arc: TAU, lv: [null, { dmg: 28, range: 100, kb: 560, poise: 70, stop: 0.09 }, { dmg: 40, range: 120, kb: 680, poise: 95, stop: 0.11 }, { dmg: 58, range: 145, kb: 820, poise: 150, stop: 0.13, guardBreak: true }] },
   };
   const GREAT = { // espada/machado de duas mãos: mais alcance e peso
-    l1: mv(SWORD.l1, { id: 'g1', clip: '2H_Melee_Attack_Slice', wind: 0.1, active: 0.1, rec: 0.26, dmg: 16, range: 86, arc: 2.3, kb: 220, lunge: 230, poise: 22 }),
-    l2: mv(SWORD.l2, { id: 'g2', clip: '2H_Melee_Attack_Chop', wind: 0.13, active: 0.1, rec: 0.3, dmg: 19, range: 90, arc: 1.7, kb: 260, lunge: 260, poise: 28, side: 1 }),
+    l1: mv(SWORD.l1, { id: 'g1', clip: 'Great_A', wind: 0.1, active: 0.1, rec: 0.26, dmg: 16, range: 86, arc: 2.3, kb: 220, lunge: 230, poise: 22 }),
+    l2: mv(SWORD.l2, { id: 'g2', clip: 'Great_B', wind: 0.13, active: 0.1, rec: 0.3, dmg: 19, range: 90, arc: 1.7, kb: 260, lunge: 260, poise: 28, side: 1 }),
     l3: mv(SWORD.l3, { id: 'g3', clip: '2H_Melee_Attack_Spinning', wind: 0.12, active: 0.2, rec: 0.36, dmg: 26, range: 104, arc: TAU, kb: 620, lunge: 240, poise: 60, knockdown: true }),
     delayed: mv(SWORD.delayed, { clip: '2H_Melee_Attack_Chop', name: 'RACHA-CHÃO', arc: 1.2, range: 150, dmg: 30, wind: 0.2, pierce: true, knockdown: true }),
     b1: mv(SWORD.b1, { clip: '2H_Melee_Attack_Slice', dmg: 16, range: 84, launch: 700 }),
@@ -1021,20 +1021,20 @@
   }
 
   // ---------- Armas (três por herói) ----------
-  // show: peças do modelo visíveis com a arma · block/parry: custo do bloqueio e janela do aparo
+  // gear: armas nas mãos ([modelo, mão]) · block/parry: custo do bloqueio e janela do aparo
   const WEAPONS = {
-    rubra: { hero: 'selen', name: 'Rubra', kind: 'Espada e broquel', lore: 'A espada que Vezmir forjou para ela. Ainda brilha.', cost: 0, show: ['1H_Sword', 'Badge_Shield'], idle: 'Idle', block: 0.7, parry: 1.2, set: SWORD },
-    vigia: { hero: 'selen', name: 'Vigia de Odila', kind: 'Montante', lore: 'A lâmina longa de Irmã Odila. Pesada como três noites sem dormir.', cost: 60, show: ['2H_Sword'], idle: '2H_Melee_Idle', block: 1.25, parry: 1, set: scaleSet(GREAT, { dmg: 1.1, range: 1.05, time: 1.05 }) },
-    gemeas: { hero: 'selen', name: 'As Irmãs de Brand', kind: 'Duas espadas', lore: 'Brand lutava com duas. Dizia que uma era para errar.', cost: 120, show: ['1H_Sword', '1H_Sword_Offhand'], idle: 'Idle', block: 1.15, parry: 1, rage: 1.3, set: DUAL },
-    quebra: { hero: 'orsa', name: 'Quebra-Portões', kind: 'Machado de guerra', lore: 'Arrombou a porta das Fossas por dentro. Duas vezes.', cost: 0, show: ['2H_Axe'], idle: '2H_Melee_Idle', block: 1.1, parry: 0.9, set: scaleSet(GREAT, { dmg: 1.3, poise: 1.5, time: 1.12 }) },
-    presa: { hero: 'orsa', name: 'Presa e Broquel', kind: 'Machado e escudo', lore: 'O escudo tem marcas de dentes. Não são de Orsa.', cost: 60, show: ['1H_Axe', 'Barbarian_Round_Shield'], idle: 'Idle', block: 0.65, parry: 1.1, set: scaleSet(SWORD, { dmg: 1.2, poise: 1.3 }) },
-    irmaos: { hero: 'orsa', name: 'Machados Irmãos', kind: 'Dois machados', lore: 'Um é dela. O outro era de quem dividiu a cela.', cost: 120, show: ['1H_Axe', '1H_Axe_Offhand'], idle: 'Idle', block: 1.1, parry: 1, rage: 1.2, set: scaleSet(DUAL, { dmg: 1.2, poise: 1.4 }) },
-    pavios: { hero: 'ilan', name: 'Pavios Gêmeos', kind: 'Adagas duplas', lore: 'Da Guilda. Cada uma apaga uma vela sem fazer barulho.', cost: 0, show: ['Knife', 'Knife_Offhand'], idle: 'Idle', block: 1.3, parry: 1, set: scaleSet(DUAL, { dmg: 0.95, time: 0.9 }) },
-    ferrao: { hero: 'ilan', name: 'Ferrão', kind: 'Adaga e besta de mão', lore: 'Leve o bastante para disparar enquanto foge.', cost: 60, show: ['Knife', '1H_Crossbow'], idle: 'Idle', block: 1.3, parry: 1, bow: true, set: scaleSet(SWORD, { dmg: 0.9, time: 0.9 }) },
-    punhos: { hero: 'ilan', name: 'Mãos da Rua Baixa', kind: 'Punhos e chutes', lore: 'Antes da Guilda, Ilan brigava por pão.', cost: 120, show: [], idle: 'Unarmed_Idle', block: 1.2, parry: 1.25, set: scaleSet(FIST, { poise: 1.2 }) },
-    cajado: { hero: 'aurel', name: 'Cajado da Primeira Chama', kind: 'Cajado', lore: 'A madeira nunca esfria. O arquivo inteiro cheira a fumaça.', cost: 0, show: ['2H_Staff'], idle: '2H_Melee_Idle', block: 1.2, parry: 1, set: STAFF },
-    varinha: { hero: 'aurel', name: 'Varinha do Arquivista', kind: 'Varinha e tomo', lore: 'Escreve no ar. O que escreve, queima.', cost: 60, show: ['1H_Wand', 'Spellbook_open'], idle: 'Idle', block: 1.3, parry: 1, set: WAND },
-    tomo: { hero: 'aurel', name: 'Tomo da Geada', kind: 'Grimório', lore: 'As páginas estão sempre úmidas de orvalho congelado.', cost: 120, show: ['Spellbook_open'], idle: 'Idle', block: 1.2, parry: 1, set: TOME },
+    rubra: { hero: 'selen', name: 'Rubra', kind: 'Espada e broquel', lore: 'A espada que Vezmir forjou para ela. Ainda brilha.', cost: 0, gear: [['sword', 'r'], ['heater', 'l']], idle: 'Sword_Idle', block: 0.7, parry: 1.2, set: SWORD },
+    vigia: { hero: 'selen', name: 'Vigia de Odila', kind: 'Montante', lore: 'A lâmina longa de Irmã Odila. Pesada como três noites sem dormir.', cost: 60, gear: [['claymore', 'r']], idle: 'Sword_Idle', block: 1.25, parry: 1, set: scaleSet(GREAT, { dmg: 1.1, range: 1.05, time: 1.05 }) },
+    gemeas: { hero: 'selen', name: 'As Irmãs de Brand', kind: 'Duas espadas', lore: 'Brand lutava com duas. Dizia que uma era para errar.', cost: 120, gear: [['sword', 'r'], ['sword', 'l']], idle: 'Sword_Idle', block: 1.15, parry: 1, rage: 1.3, set: DUAL },
+    quebra: { hero: 'orsa', name: 'Quebra-Portões', kind: 'Machado de guerra', lore: 'Arrombou a porta das Fossas por dentro. Duas vezes.', cost: 0, gear: [['greataxe', 'r']], idle: 'Sword_Idle', block: 1.1, parry: 0.9, set: scaleSet(GREAT, { dmg: 1.3, poise: 1.5, time: 1.12 }) },
+    presa: { hero: 'orsa', name: 'Presa e Broquel', kind: 'Machado e escudo', lore: 'O escudo tem marcas de dentes. Não são de Orsa.', cost: 60, gear: [['axe', 'r'], ['round', 'l']], idle: 'Idle_Shield_Loop', block: 0.65, parry: 1.1, set: scaleSet(SWORD, { dmg: 1.2, poise: 1.3 }) },
+    irmaos: { hero: 'orsa', name: 'Machados Irmãos', kind: 'Dois machados', lore: 'Um é dela. O outro era de quem dividiu a cela.', cost: 120, gear: [['axe', 'r'], ['axe', 'l']], idle: 'Sword_Idle', block: 1.1, parry: 1, rage: 1.2, set: scaleSet(DUAL, { dmg: 1.2, poise: 1.4 }) },
+    pavios: { hero: 'ilan', name: 'Pavios Gêmeos', kind: 'Adagas duplas', lore: 'Da Guilda. Cada uma apaga uma vela sem fazer barulho.', cost: 0, gear: [['dagger', 'r'], ['dagger', 'l']], idle: 'Sword_Idle', block: 1.3, parry: 1, set: scaleSet(DUAL, { dmg: 0.95, time: 0.9 }) },
+    ferrao: { hero: 'ilan', name: 'Ferrão', kind: 'Adaga e besta de mão', lore: 'Leve o bastante para disparar enquanto foge.', cost: 60, gear: [['dagger', 'r'], ['bow', 'l']], idle: 'Sword_Idle', block: 1.3, parry: 1, bow: true, set: scaleSet(SWORD, { dmg: 0.9, time: 0.9 }) },
+    punhos: { hero: 'ilan', name: 'Mãos da Rua Baixa', kind: 'Punhos e chutes', lore: 'Antes da Guilda, Ilan brigava por pão.', cost: 120, gear: [], idle: 'Idle_Loop', block: 1.2, parry: 1.25, set: scaleSet(FIST, { poise: 1.2 }) },
+    cajado: { hero: 'aurel', name: 'Cajado da Primeira Chama', kind: 'Cajado', lore: 'A madeira nunca esfria. O arquivo inteiro cheira a fumaça.', cost: 0, gear: [['staff', 'r']], idle: 'Idle_Loop', block: 1.2, parry: 1, set: STAFF },
+    varinha: { hero: 'aurel', name: 'Varinha do Arquivista', kind: 'Varinha e tomo', lore: 'Escreve no ar. O que escreve, queima.', cost: 60, gear: [['wand', 'r'], ['tome', 'l']], idle: 'Spell_Simple_Idle_Loop', block: 1.3, parry: 1, set: WAND },
+    tomo: { hero: 'aurel', name: 'Tomo da Geada', kind: 'Grimório', lore: 'As páginas estão sempre úmidas de orvalho congelado.', cost: 120, gear: [['tome', 'l']], idle: 'Spell_Simple_Idle_Loop', block: 1.2, parry: 1, set: TOME },
   };
 
   // ---------- Heróis ----------
@@ -4887,67 +4887,145 @@
   }
 
   // =========================================================================
-  // Modelos animados (KayKit Adventurers + Skeletons, de Kay Lousberg — CC0)
-  //   Ficam em assets/. Se não carregarem (sem internet, ou aberto via file://),
-  //   o jogo usa os bonecos procedurais acima.
+  // Personagens realistas (Quaternius: Universal Base Characters, Modular Outfits Fantasy,
+  // Universal Animation Library 1 e 2 e Medieval Weapons — CC0)
+  //   Todas as peças usam o mesmo esqueleto de 65 ossos: cabeça + roupa + cabelo são montados
+  //   em tempo de execução, e as animações (captura de movimento) valem para todos.
+  //   Ficam em assets/h/. Se não carregarem, o jogo usa os bonecos procedurais acima.
   // =========================================================================
   const EX = window.THREE_EXTRAS || {};
   const ASSET_BASE = 'assets/';
   // Página autocontida: modelos (JSON) e texturas (data URI) podem vir embutidos em window.__ASSETS
   const EMBED = window.__ASSETS || null;
-  const BUILD = 'build 8 · trilha e gráficos';
-  // Todas as animações vêm de UMA biblioteca (anims.glb): os KayKit usam o mesmo esqueleto.
-  // show: peças de arma visíveis no modelo (as outras ficam escondidas) · tint: cor multiplicada
-  const ANIM_FILE = 'anims.glb';
-  const WEAPON_MESH = new Set(['1H_Sword', '1H_Sword_Offhand', '2H_Sword', 'Badge_Shield', '2H_Axe', '1H_Axe', '1H_Axe_Offhand', 'Barbarian_Round_Shield',
-    'Knife', 'Knife_Offhand', '1H_Crossbow', 'Throwable', '2H_Staff', '1H_Wand', 'Spellbook_open']);
+  const BUILD = 'build 9 · personagens realistas';
+  const ANIM_FILE = 'h/anims_h.glb';
+  const HPI = Math.PI / 2;
+  // Armas: comprimento no mundo e ponto da empunhadura no eixo da arma (unidades do arquivo).
+  // shield: preso no antebraço, com a face para fora · proc: feita aqui mesmo (cajado, varinha, tomo)
+  const GEAR = {
+    sword: { file: 'h/w_sword.glb', len: 0.95, grip: -0.4 },
+    claymore: { file: 'h/w_claymore.glb', len: 1.45, grip: 0.35 },
+    axe: { file: 'h/w_axe.glb', len: 0.8, grip: -1.25 },
+    greataxe: { file: 'h/w_axe_double.glb', len: 1.35, grip: -2.45 },
+    dagger: { file: 'h/w_dagger.glb', len: 0.42, grip: -0.3 },
+    hammer: { file: 'h/w_hammer_small.glb', len: 0.75, grip: -0.8 },
+    bow: { file: 'h/w_bow_wooden.glb', len: 1.1, grip: 0, bow: true },
+    heater: { file: 'h/w_shield_heater.glb', len: 0.66, shield: true },
+    round: { file: 'h/w_shield_round.glb', len: 0.6, shield: true },
+    staff: { proc: 'staff', rot: [0, -HPI, -HPI] }, // na diagonal, subindo à frente do corpo
+    wand: { proc: 'wand' },
+    tome: { proc: 'tome', shield: true },
+  };
+  // Receitas: cabeça (corpo-base cortado no pescoço) + roupa + cabelo + armas.
+  //  tex: textura da roupa (tingimentos feitos a partir das originais) · only: peças usadas daquela roupa
+  //  hide: peças escondidas · undead: pele de cinza e olhos em brasa · gear: [arma, mão]
   const MODEL_DEFS = {
-    hero_selen: { file: 'knight.glb', h: 1.85, idle: 'Idle', hero: true },
-    hero_orsa: { file: 'barbarian.glb', h: 1.9, idle: '2H_Melee_Idle', hero: true },
-    hero_ilan: { file: 'gunner.glb', h: 1.8, idle: 'Idle', hero: true },
-    hero_aurel: { file: 'mage.glb', h: 1.85, idle: 'Idle', hero: true },
-    grunt: { file: 'skeleton_warrior.glb', h: 1.8, idle: 'Idle_Combat', right: 'skeleton_blade.glb', left: 'skeleton_shield.glb', undead: true },
-    shield: { file: 'skeleton_warrior.glb', h: 1.9, idle: 'Idle_Combat', right: 'skeleton_axe.glb', left: 'skeleton_shield_large.glb', undead: true, tint: '#d8d0c0' },
-    archer: { file: 'skeleton_rogue.glb', h: 1.78, idle: 'Idle_Combat', right: 'skeleton_crossbow.glb', undead: true },
-    brute: { file: 'barbarian.glb', h: 1.8, idle: '2H_Melee_Idle', show: ['2H_Axe'], tint: '#c8a4a0' },
-    rogue: { file: 'rogue.glb', h: 1.75, idle: 'Idle', show: ['Knife', 'Knife_Offhand'] },
-    gunner: { file: 'gunner.glb', h: 1.78, idle: 'Idle', gun: true, show: [], tint: '#b8aa98' },
-    grenadier: { file: 'gunner.glb', h: 1.8, idle: 'Idle', show: ['Throwable'], tint: '#e0a070' },
-    chaplain: { file: 'boss.glb', h: 1.78, idle: 'Idle_Combat', right: 'boss_staff.glb', undead: true, tint: '#a8d8ff' },
-    boss: { file: 'boss.glb', h: 1.9, idle: 'Idle_Combat', right: 'boss_staff.glb', undead: true, bossGlow: true },
+    hero_selen: { head: 'head_f', parts: [{ f: 'ranger_f', tex: 'tex_ranger_crimson.jpg', hide: ['Hood'] }], hair: ['hair_long'], hairTint: '#6a2a18', h: 1.76, idle: 'Sword_Idle', hero: true },
+    hero_orsa: { head: 'head_f', parts: [{ f: 'peasant_f', tex: 'tex_peasant_iron.jpg' }, { f: 'ranger_f', only: ['Pauldrons', 'Bracer', 'Belt_1'], tex: 'tex_ranger_night.jpg' }], hair: ['hair_buzzedfemale'], hairTint: '#c8b8a0', h: 1.86, idle: 'Sword_Idle', hero: true },
+    hero_ilan: { head: 'head_m', parts: [{ f: 'ranger_m', tex: 'tex_ranger_night.jpg' }], hair: ['hair_buzzed'], h: 1.8, idle: 'Sword_Idle', hero: true },
+    hero_aurel: { head: 'head_m', parts: [{ f: 'peasant_m', tex: 'tex_peasant_blue.jpg' }], hair: ['hair_simpleparted', 'hair_beard'], hairTint: '#b8b0a8', h: 1.84, idle: 'Idle_Loop', hero: true },
+    grunt: { head: 'head_m', parts: [{ f: 'peasant_m', tex: 'tex_peasant_2.jpg' }], h: 1.8, idle: 'Sword_Idle', undead: true, gear: [['sword', 'r'], ['round', 'l']] },
+    shield: { head: 'head_m', parts: [{ f: 'ranger_m', tex: 'tex_ranger_3.jpg' }], h: 1.9, idle: 'Idle_Shield_Loop', undead: true, gear: [['axe', 'r'], ['heater', 'l']], cloth: '#b8b0a8' },
+    archer: { head: 'head_f', parts: [{ f: 'ranger_f', tex: 'tex_ranger_3.jpg' }], h: 1.76, idle: 'Sword_Idle', undead: true, gear: [['bow', 'l']] },
+    brute: { head: 'head_m', parts: [{ f: 'peasant_m', tex: 'tex_peasant_2.jpg' }, { f: 'ranger_m', only: ['Pauldron', 'Bracer'], tex: 'tex_ranger_night.jpg' }], hair: ['hair_beard', 'hair_buzzed'], hairTint: '#3a2418', h: 1.86, idle: 'Sword_Idle', gear: [['greataxe', 'r']], skin: '#d8b0a0' },
+    rogue: { head: 'head_f', parts: [{ f: 'ranger_f', tex: 'tex_ranger_guild.jpg' }], h: 1.74, idle: 'Sword_Idle', gear: [['dagger', 'r'], ['dagger', 'l']] },
+    gunner: { head: 'head_m', parts: [{ f: 'ranger_m', tex: 'tex_ranger_guild.jpg', hide: ['Hood'] }], hair: ['hair_buzzed', 'hair_beard'], hairTint: '#2a1a12', h: 1.8, idle: 'Pistol_Idle_Loop', gun: true },
+    grenadier: { head: 'head_m', parts: [{ f: 'peasant_m', tex: 'tex_peasant_2.jpg' }, { f: 'ranger_m', only: ['Belt_1', 'Belt_2', 'Bracer'], tex: 'tex_ranger_guild.jpg' }], hair: ['hair_simpleparted'], hairTint: '#5a3018', h: 1.8, idle: 'Idle_Loop' },
+    chaplain: { head: 'head_m', parts: [{ f: 'ranger_m', tex: 'tex_ranger_night.jpg' }], h: 1.8, idle: 'Spell_Simple_Idle_Loop', undead: true, gear: [['staff', 'r']], cloth: '#a8c8e8' },
+    boss: { head: 'head_m', parts: [{ f: 'peasant_m', tex: 'tex_peasant_2.jpg' }, { f: 'ranger_m', only: ['Pauldron', 'Bracer', 'Belt_1'], tex: 'tex_ranger_crimson.jpg' }], hair: ['hair_simpleparted', 'hair_beard'], hairTint: '#d8d0c8', h: 2.05, idle: 'Sword_Idle', undead: true, bossGlow: true, gear: [['staff', 'r']] },
   };
   const heroModel = () => 'hero_' + (P.hero || 'selen');
-  // Pontos de controle de cada ataque, em fração do clipe:
-  // [início, começo do golpe, fim do golpe, fim usado]. O tempo da simulação é mapeado neles.
-  // (medidos pelo pico de velocidade da mão em cada clipe)
-  const MARKS = {
-    '1H_Melee_Attack_Slice_Diagonal': [0.12, 0.35, 0.45, 0.8],
-    '1H_Melee_Attack_Slice_Horizontal': [0.03, 0.18, 0.27, 0.7],
-    '1H_Melee_Attack_Chop': [0.2, 0.49, 0.57, 0.9],
-    '2H_Melee_Attack_Spin': [0.05, 0.24, 0.56, 0.85],
-    '2H_Melee_Attack_Chop': [0.1, 0.48, 0.54, 0.9],
-    '2H_Melee_Attack_Stab': [0, 0.2, 0.27, 0.85],
-    '1H_Melee_Attack_Stab': [0.05, 0.2, 0.28, 0.6],
-    Dualwield_Melee_Attack_Stab: [0.05, 0.2, 0.27, 0.6],
-    Dualwield_Melee_Attack_Slice: [0.15, 0.43, 0.55, 0.9],
-    Dualwield_Melee_Attack_Chop: [0.12, 0.4, 0.47, 0.85],
-    '1H_Melee_Attack_Jump_Chop': [0.1, 0.47, 0.57, 0.85],
-    '2H_Melee_Attack_Slice': [0.08, 0.3, 0.39, 0.8],
-    '2H_Melee_Attack_Spinning': [0.0, 0.1, 0.9, 1.0],
-    Block_Attack: [0.05, 0.28, 0.4, 0.8],
-    Throw: [0.15, 0.42, 0.55, 0.85],
-    Unarmed_Melee_Attack_Kick: [0.02, 0.24, 0.38, 0.8],
-    Unarmed_Melee_Attack_Punch_A: [0.05, 0.25, 0.33, 0.7],
-    Unarmed_Melee_Attack_Punch_B: [0.05, 0.2, 0.31, 0.7],
-    Spellcast_Shoot: [0.0, 0.05, 0.2, 0.6],
-    Spellcast_Raise: [0.0, 0.1, 0.25, 0.7],
-    Spellcast_Long: [0.0, 0.05, 0.12, 0.4],
-    Use_Item: [0.05, 0.3, 0.5, 0.8],
+  // Nomes de movimento usados pela simulação → trecho de um clipe de captura.
+  //  src: clipe · w: janela [início, fim] do clipe (fração) · m: [início, começo do golpe, fim do golpe, fim]
+  //  na MESMA escala do clipe (medidos pelo pico de velocidade das mãos/pés) · spin: giro de corpo inteiro
+  //  rev: toca ao contrário · yaw: o corpo acompanha a direção do movimento
+  const ALIAS = {
+    // espada (combo de três golpes que emendam num único clipe de captura)
+    '1H_Melee_Attack_Slice_Diagonal': { src: 'Sword_Regular_Combo', m: [0.0, 0.045, 0.1, 0.16] },
+    '1H_Melee_Attack_Slice_Horizontal': { src: 'Sword_Regular_Combo', m: [0.14, 0.2, 0.25, 0.33] },
+    '1H_Melee_Attack_Chop': { src: 'Sword_Regular_Combo', m: [0.33, 0.47, 0.53, 0.68] },
+    '1H_Melee_Attack_Stab': { src: 'Sword_Regular_C', m: [0.1, 0.27, 0.34, 0.58] },
+    Sword_Lunge: { src: 'Sword_Dash', m: [0.08, 0.15, 0.23, 0.5] },
+    Sword_Wide: { src: 'Sword_Attack', m: [0.04, 0.16, 0.25, 0.55] },
+    '1H_Melee_Attack_Jump_Chop': { src: 'Sword_Heavy_Combo', m: [0.33, 0.39, 0.44, 0.5] },
+    // armas pesadas (combo pesado em quatro tempos)
+    Great_A: { src: 'Sword_Heavy_Combo', m: [0.0, 0.075, 0.12, 0.19] },
+    Great_B: { src: 'Sword_Heavy_Combo', m: [0.18, 0.245, 0.28, 0.35] },
+    '2H_Melee_Attack_Chop': { src: 'Sword_Heavy_Combo', m: [0.47, 0.545, 0.6, 0.72] },
+    '2H_Melee_Attack_Stab': { src: 'Sword_Regular_C', m: [0.1, 0.27, 0.34, 0.6] },
+    '2H_Melee_Attack_Slice': { src: 'Melee_Hook', m: [0.12, 0.46, 0.58, 0.8] },
+    '2H_Melee_Attack_Spinning': { src: 'Sword_Attack', m: [0.02, 0.12, 0.3, 0.55], spin: true },
+    '2H_Melee_Attack_Spin': { src: 'Sword_Attack', m: [0.0, 0.12, 0.3, 0.55], spin: true },
+    Block_Attack: { src: 'Shield_OneShot', m: [0.0, 0.04, 0.14, 0.42] },
+    // duas lâminas e mãos vazias
+    Dualwield_Melee_Attack_Slice: { src: 'Sword_Regular_A', m: [0.0, 0.42, 0.72, 1.0] },
+    Dualwield_Melee_Attack_Chop: { src: 'Sword_Regular_B', m: [0.0, 0.4, 0.66, 1.0] },
+    Dualwield_Melee_Attack_Stab: { src: 'Punch_Cross', m: [0.04, 0.15, 0.23, 0.45] },
+    Unarmed_Melee_Attack_Punch_A: { src: 'Punch_Jab', m: [0.04, 0.13, 0.2, 0.42] },
+    Unarmed_Melee_Attack_Punch_B: { src: 'Punch_Cross', m: [0.04, 0.15, 0.23, 0.45] },
+    Unarmed_Melee_Attack_Kick: { src: 'Melee_Hook', m: [0.12, 0.46, 0.58, 0.8] },
+    Zombie_Claw: { src: 'Zombie_Scratch', m: [0.12, 0.32, 0.4, 0.62] },
+    // magia, arremesso, itens
+    Spellcast_Shoot: { src: 'Spell_Simple_Shoot', m: [0.0, 0.02, 0.1, 0.5] },
+    Spellcast_Raise: { src: 'Spell_Simple_Enter', m: [0.0, 0.5, 0.8, 1.0] },
+    Spellcast_Long: { src: 'Spell_Simple_Idle_Loop', m: [0.0, 0.05, 0.12, 0.4] },
+    Spellcast_Summon: { src: 'Spell_Simple_Idle_Loop' },
+    Throw: { src: 'OverhandThrow', m: [0.02, 0.18, 0.27, 0.55] },
+    Use_Item: { src: 'Consume', m: [0.04, 0.2, 0.34, 0.6] },
+    Taunt: { src: 'Idle_Shield_Break' },
+    Cheer: { src: 'Idle_FoldArms_Loop' },
+    // defesa, esquiva, dano
+    Block: { src: 'Sword_Block', w: [0.0, 0.3] },
+    Blocking: { src: 'Idle_Shield_Loop' },
+    Block_Hit: { src: 'Idle_Shield_Break', w: [0.0, 0.7] },
+    Dodge_Forward: { src: 'Roll', w: [0.02, 0.85], yaw: true },
+    Dodge_Backward: { src: 'Roll', w: [0.02, 0.85], yaw: true },
+    Dodge_Left: { src: 'Roll', w: [0.02, 0.85], yaw: true },
+    Dodge_Right: { src: 'Roll', w: [0.02, 0.85], yaw: true },
+    Hit_A: { src: 'Hit_Chest' },
+    Hit_B: { src: 'Hit_Head' },
+    Death_A: { src: 'Death01' },
+    Death_C_Skeletons: { src: 'Death01' },
+    Lie_StandUp: { src: 'LayToIdle', w: [-0.54, 1.0] }, // 0.35 da janela antiga = deitado
+    Spawn_Ground_Skeletons: { src: 'LayToIdle', w: [0.0, 1.8] },
+    Skeleton_Inactive_Standing_Pose: { src: 'Zombie_Idle_Loop' },
+    // parado e em movimento
+    Idle: { src: 'Sword_Idle' },
+    Idle_Combat: { src: 'Sword_Idle' },
+    '2H_Melee_Idle': { src: 'Sword_Idle' },
+    Unarmed_Idle: { src: 'Idle_Loop' },
+    Walking_A: { src: 'Walk_Loop' },
+    Walking_Backwards: { src: 'Walk_Loop', rev: true },
+    Running_A: { src: 'Jog_Fwd_Loop' },
+    Running_B: { src: 'Sprint_Loop' },
+    Running_Strafe_Right: { src: 'Jog_Fwd_Loop', yaw: true },
+    Running_Strafe_Left: { src: 'Jog_Fwd_Loop', yaw: true },
+    '2H_Ranged_Aiming': { src: 'Pistol_Aim_Neutral' },
+    '2H_Ranged_Shoot': { src: 'Pistol_Shoot' },
+    '2H_Ranged_Reload': { src: 'Pistol_Reload' },
   };
+  // marcas na escala da janela de cada nome (0 = início do trecho, 1 = fim)
+  const MARKS = {};
+  for (const k in ALIAS) {
+    const A = ALIAS[k];
+    if (A.m && !A.w) A.w = [A.m[0], A.m[3]];
+    if (A.m) MARKS[k] = A.m.map((x) => (x - A.w[0]) / (A.w[1] - A.w[0]));
+  }
   const markOf = (name) => MARKS[name] || [0.05, 0.3, 0.45, 0.85];
-  const COMBO_CLIPS = ['1H_Melee_Attack_Slice_Diagonal', '1H_Melee_Attack_Slice_Horizontal', '1H_Melee_Attack_Chop'];
-  const MODELS = { ready: false, settled: false, gltf: {} };
+  const MODELS = { ready: false, settled: false, gltf: {}, tex: {}, clips: {} };
   const canLoadAssets = (!!EMBED || location.protocol !== 'file:') && !!EX.GLTFLoader && !!EX.SkeletonUtils;
+  const H_FILES = () => {
+    const s = new Set([ANIM_FILE]);
+    for (const d of Object.values(MODEL_DEFS)) {
+      s.add('h/' + d.head + '.glb');
+      for (const p of d.parts) s.add('h/' + p.f + '.glb');
+      for (const h of d.hair || []) s.add('h/' + h + '.glb');
+      for (const [g] of d.gear || []) if (GEAR[g].file) s.add(GEAR[g].file);
+    }
+    for (const w of Object.values(WEAPONS)) for (const [g] of w.gear || []) if (GEAR[g].file) s.add(GEAR[g].file);
+    return [...s];
+  };
+  const H_TEX = () => [...new Set(Object.values(MODEL_DEFS).flatMap((d) => d.parts.map((p) => p.tex)).filter(Boolean))];
   const modelsPromise = (() => {
     if (!canLoadAssets) {
       MODELS.settled = true;
@@ -4956,7 +5034,7 @@
     }
     const loader = new EX.GLTFLoader();
     if (EX.MeshoptDecoder) loader.setMeshoptDecoder(EX.MeshoptDecoder);
-    const files = [...new Set(Object.values(MODEL_DEFS).flatMap((d) => [d.file, d.right, d.left]).filter(Boolean)), 'dungeon.glb', ANIM_FILE, 'bomb.glb'];
+    const files = [...H_FILES(), 'dungeon.glb', 'bomb.glb'];
     // embutido: GLB em base64 → ArrayBuffer (nenhuma requisição de rede)
     const b64ToBuffer = (b64) => {
       const bin = atob(b64), u8 = new Uint8Array(bin.length);
@@ -4971,8 +5049,25 @@
       try { loader.parse(b64ToBuffer(EMBED[f]), '', res, rej); } finally { window.createImageBitmap = cib; }
     });
     const loadOne = (f) => (EMBED && EMBED[f] ? parseEmbedded(f) : loader.loadAsync(ASSET_BASE + f));
-    return Promise.all(files.map((f) => loadOne(f).then((g) => { MODELS.gltf[f] = g; })))
-      .then(() => { MODELS.ready = true; return true; })
+    // texturas de roupa tingidas: <img> (data URI quando embutidas)
+    const loadTex = (f) => new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => {
+        const t = new THREE.Texture(img);
+        t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; t.anisotropy = 4; t.needsUpdate = true;
+        MODELS.tex[f] = t; res();
+      };
+      img.onerror = () => rej(new Error('textura ' + f));
+      img.src = EMBED && EMBED['h/' + f] ? 'data:image/jpeg;base64,' + EMBED['h/' + f] : ASSET_BASE + 'h/' + f;
+    });
+    return Promise.all([...files.map((f) => loadOne(f).then((g) => { MODELS.gltf[f] = g; })), ...H_TEX().map(loadTex)])
+      .then(() => {
+        // uma "cópia rasa" do clipe de captura por nome de movimento (mesmas trilhas, ação própria no mixer)
+        const src = {};
+        for (const c of MODELS.gltf[ANIM_FILE].animations) { src[c.name] = c; MODELS.clips[c.name] = c; }
+        for (const k in ALIAS) if (src[ALIAS[k].src]) MODELS.clips[k] = new THREE.AnimationClip(k, src[ALIAS[k].src].duration, src[ALIAS[k].src].tracks);
+        MODELS.ready = true; return true;
+      })
       .catch((err) => {
         console.warn('Modelos 3D indisponíveis; usando personagens procedurais.', err);
         MODELS.error = (err && err.message) || String(err);
@@ -4981,43 +5076,125 @@
       .finally(() => { MODELS.settled = true; });
   })();
 
+  // Armas feitas aqui: cajado com brasa, varinha, tomo (eixo +Y, empunhadura na origem, em metros)
+  function procGear(kind, mats) {
+    const g = new THREE.Group();
+    const wood = new THREE.MeshStandardMaterial({ color: '#4a2e1c', roughness: 0.75 });
+    const add = (geom, m, y) => { const o = new THREE.Mesh(geom, m); o.position.y = y; o.castShadow = true; g.add(o); return o; };
+    mats.push(wood); wood.userData.e0 = wood.emissive.clone(); wood.userData.ei0 = 1;
+    if (kind === 'staff' || kind === 'wand') {
+      const L = kind === 'staff' ? 1.75 : 0.42, r = kind === 'staff' ? 0.028 : 0.014;
+      const lo = kind === 'staff' ? -0.55 : -0.1;
+      add(geo('pg_' + kind, () => new THREE.CylinderGeometry(r * 0.8, r, L, 8)), wood, lo + L / 2);
+      const ember = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 1.2, 0.3) });
+      add(geo('pg_ember_' + kind, () => new THREE.IcosahedronGeometry(kind === 'staff' ? 0.06 : 0.025, 1)), ember, lo + L + 0.02);
+      if (kind === 'staff') { // garras de ferro segurando a brasa
+        const iron = new THREE.MeshStandardMaterial({ color: '#2d2c33', metalness: 0.8, roughness: 0.4 });
+        mats.push(iron); iron.userData.e0 = iron.emissive.clone(); iron.userData.ei0 = 1;
+        add(geo('pg_claw', () => new THREE.TorusGeometry(0.07, 0.012, 5, 10).rotateX(HPI)), iron, lo + L - 0.02);
+      }
+    } else { // tomo aberto na mão esquerda
+      const cover = new THREE.MeshStandardMaterial({ color: '#5a1a14', roughness: 0.6 }), paper = new THREE.MeshStandardMaterial({ color: '#e8dcc0', roughness: 0.9 });
+      for (const m of [cover, paper]) { mats.push(m); m.userData.e0 = m.emissive.clone(); m.userData.ei0 = 1; }
+      add(geo('pg_cover', () => new THREE.BoxGeometry(0.24, 0.3, 0.035)), cover, 0);
+      const pg = add(geo('pg_pages', () => new THREE.BoxGeometry(0.22, 0.28, 0.03)), paper, 0); pg.position.z = 0.03;
+    }
+    return g;
+  }
+  // Prende uma arma no osso da mão (a escala compensa a escala do esqueleto)
+  function attachGear(v, id, hand) {
+    const G = GEAR[id], bone = v.bones[hand === 'l' ? 'hand_l' : 'hand_r'];
+    if (!G || !bone) return null;
+    const holder = new THREE.Group();
+    const bs = bone.getWorldScale(new THREE.Vector3()).x / v.root.scale.x || 1;
+    let mesh;
+    if (G.proc) { mesh = procGear(G.proc, v.mats); holder.scale.setScalar(1 / bs); }
+    else {
+      mesh = MODELS.gltf[G.file].scene.clone(true);
+      if (!G.size) {
+        const sz = new THREE.Box3().setFromObject(MODELS.gltf[G.file].scene).getSize(new THREE.Vector3());
+        G.size = Math.max(sz.x, sz.y, sz.z);
+      }
+      mesh.position.y = -(G.grip || 0);
+      holder.scale.setScalar(G.len / G.size / bs);
+      mesh.traverse((o) => {
+        if (!o.isMesh) return;
+        o.castShadow = true;
+        o.material = o.material.clone(); o.material.userData.e0 = o.material.emissive.clone(); o.material.userData.ei0 = o.material.emissiveIntensity;
+        v.mats.push(o.material);
+      });
+    }
+    // eixos do osso da mão: +Y da arma vira a direção da lâmina saindo do punho
+    if (G.rot) holder.rotation.set(G.rot[0], G.rot[1], G.rot[2]);
+    else if (G.shield) holder.rotation.set(0, -HPI, HPI);
+    else if (G.bow) holder.rotation.set(Math.PI, 0, hand === 'l' ? HPI : -HPI);
+    else if (hand === 'l') holder.rotation.set(Math.PI, 0, HPI);
+    else holder.rotation.set(0, 0, -HPI);
+    if (G.shield) holder.position.set(0, 0, -0.05 / bs);
+    holder.add(mesh);
+    bone.add(holder);
+    v.gear.push(holder);
+    return holder;
+  }
+  function setGear(v, list) {
+    for (const h of v.gear) {
+      h.parent.remove(h);
+      h.traverse((o) => { if (o.isMesh) { const i = v.mats.indexOf(o.material); if (i >= 0) v.mats.splice(i, 1); } });
+    }
+    v.gear = [];
+    for (const [id, hand] of list || []) attachGear(v, id, hand);
+  }
+
+  const SKIN_MAT = /Superhero|Regular_/, HAIR_MAT = /Hair/;
   function buildModelView(kind, elite) {
-    const def = MODEL_DEFS[kind], g = MODELS.gltf[def.file];
-    const model = EX.SkeletonUtils.clone(g.scene);
-    // o GLTFLoader remove o ponto dos nomes: "handslot.r" → "handslotr"
-    const attach = (bone, file) => {
-      const b = model.getObjectByName(bone);
-      if (b && file) b.add(MODELS.gltf[file].scene.clone(true));
+    const def = MODEL_DEFS[kind];
+    const base = MODELS.gltf['h/' + def.head + '.glb'];
+    const model = EX.SkeletonUtils.clone(base.scene);
+    let skel = null;
+    model.traverse((o) => { if (o.isSkinnedMesh && !skel) skel = o.skeleton; });
+    const bones = {};
+    for (const b of skel.bones) bones[b.name] = b;
+    // roupa e cabelo: cada malha é religada aos ossos da cabeça-base pelo nome
+    const addPart = (file, opts) => {
+      const pc = MODELS.gltf['h/' + file + '.glb'].scene.clone(true);
+      const meshes = [];
+      pc.traverse((o) => { if (o.isSkinnedMesh) meshes.push(o); });
+      const remap = new Map();
+      for (const m of meshes) {
+        if (opts.only && !opts.only.some((s) => m.name.endsWith(s))) continue;
+        if (opts.hide && opts.hide.some((s) => m.name.includes(s))) continue;
+        let sk = remap.get(m.skeleton);
+        if (!sk) { sk = new THREE.Skeleton(m.skeleton.bones.map((b) => bones[b.name] || skel.bones[0]), m.skeleton.boneInverses); remap.set(m.skeleton, sk); }
+        m.userData.tex = opts.tex;
+        model.add(m);
+        m.bind(sk, m.bindMatrix);
+      }
     };
-    attach('handslotr', def.right);
-    attach('handslotl', def.left);
-    // armas do próprio modelo: só as da lista ficam visíveis
-    const weaponNodes = [];
-    model.traverse((o) => { if (WEAPON_MESH.has(o.name)) { weaponNodes.push(o); o.visible = !!(def.show && def.show.includes(o.name)); } });
-    // Todas as partes do personagem usam UM esqueleto: uma textura de ossos por personagem
-    // (em vez de uma por peça) → bem menos envio para a GPU a cada quadro.
-    const skels = [];
-    model.traverse((o) => {
-      if (!o.isSkinnedMesh) return;
-      const sk = o.skeleton;
-      const same = skels.find((k) => k.bones.length === sk.bones.length && k.bones.every((b, i) => b === sk.bones[i])
-        && k.boneInverses.every((m, i) => m.equals(sk.boneInverses[i])));
-      if (same) o.bind(same, o.bindMatrix); else skels.push(sk);
-    });
+    for (const p of def.parts) addPart(p.f, p);
+    for (const h of def.hair || []) addPart(h, {});
     const mats = [];
     model.traverse((o) => {
       if (!o.isMesh) return;
       o.castShadow = true;
       o.frustumCulled = false; // a caixa do bind pose não acompanha a animação
       const m = o.material.clone();
-      if (def.tint) m.color.multiply(new THREE.Color(def.tint));
-      if (elite) { m.color.set('#ffd98a'); m.emissive.set('#3a2600'); m.emissiveIntensity = 1; }
+      const nm = m.name || '';
+      if (SKIN_MAT.test(nm)) { if (def.undead) m.color.set('#9a948e'); else if (def.skin) m.color.set(def.skin); }
+      else if (HAIR_MAT.test(nm)) { if (def.hairTint) m.color.set(def.hairTint); }
+      else if (nm === 'MI_Eyes') { if (def.undead) { m.emissive.set('#ff5a1a'); m.emissiveIntensity = 2.2; } }
+      else {
+        if (o.userData.tex && MODELS.tex[o.userData.tex]) m.map = MODELS.tex[o.userData.tex];
+        if (def.cloth) m.color.multiply(new THREE.Color(def.cloth));
+        if (def.undead) m.color.multiply(new THREE.Color('#b0aaa4'));
+      }
+      if (elite) { m.color.lerp(new THREE.Color('#ffd98a'), 0.45); m.emissive.set('#3a2600'); m.emissiveIntensity = 1; }
       m.userData.e0 = m.emissive.clone(); m.userData.ei0 = m.emissiveIntensity;
       o.material = m;
       mats.push(m);
     });
+    model.updateMatrixWorld(true);
     if (def.base === undefined) {
-      const box = new THREE.Box3().setFromObject(g.scene);
+      const box = new THREE.Box3().setFromObject(model);
       def.base = def.h / Math.max(0.01, box.max.y - box.min.y);
       def.minY = box.min.y;
     }
@@ -5025,15 +5202,15 @@
     model.position.y = -def.minY * def.base;
     const root = new THREE.Group(); root.rotation.order = 'YXZ';
     const tilt = new THREE.Group(); root.add(tilt); tilt.add(model);
-    const scale = (LOOKS[kind] ? LOOKS[kind].scale : 1) * (elite ? 1.18 : 1) * (kind === 'brute' || kind === 'hero_orsa' ? 1.12 : 1);
+    const scale = (elite ? 1.12 : 1) * (kind === 'brute' ? 1.1 : 1);
     root.scale.setScalar(scale);
+    root.updateMatrixWorld(true);
     const v = {
-      kind, isModel: true, def, root, tilt, model, mats, scale, height: def.h * scale, weaponNodes,
-      mixer: new THREE.AnimationMixer(model), clips: {}, actions: {}, cur: null,
-      alt: false, key: null, state: '', prevState: '', flashing: false,
+      kind, isModel: true, def, root, tilt, model, mats, scale, height: def.h * scale, bones, gear: [],
+      mixer: new THREE.AnimationMixer(model), clips: MODELS.clips, actions: {}, cur: null,
+      alt: false, key: null, state: '', prevState: '', flashing: false, yaw: 0, yawT: 0, spin: 0,
     };
-    const lib = MODELS.gltf[ANIM_FILE];
-    for (const c of (lib ? lib.animations : g.animations)) v.clips[c.name] = c;
+    setGear(v, def.gear);
     if (elite) {
       const aura = new THREE.Mesh(geo('auraRing', () => new THREE.RingGeometry(0.62, 0.72, 40).rotateX(-Math.PI / 2)),
         new THREE.MeshBasicMaterial({ color: '#ffcf4a', transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -5051,7 +5228,7 @@
     if (kind === 'boss') { // brasa no cajado e aura de fogo
       const aura = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: '#ff5a1a', transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
       aura.position.y = 1.2; aura.scale.set(3.2, 3.2, 1); v.root.add(aura); v.bossAura = aura;
-      for (const m of v.mats) { m.emissive.set('#ff4a1a'); m.emissiveIntensity = 0.12; m.userData.e0 = m.emissive.clone(); m.userData.ei0 = 0.12; }
+      for (const m of v.mats) { if (m.emissiveIntensity > 1) continue; m.emissive.set('#ff4a1a'); m.emissiveIntensity = 0.035; m.userData.e0 = m.emissive.clone(); m.userData.ei0 = 0.035; }
     }
     return v;
   }
@@ -5063,10 +5240,12 @@
     let clip = v.clips[name];
     if (!clip) return null;
     if (alt) { // segunda cópia do clipe: permite repetir o mesmo golpe com transição suave
-      v.def.alt = v.def.alt || {};
-      clip = v.def.alt[name] || (v.def.alt[name] = clip.clone());
+      const C = MODELS.clips;
+      clip = C[key] || (C[key] = new THREE.AnimationClip(key, clip.duration, clip.tracks));
     }
-    return (v.actions[key] = v.mixer.clipAction(clip));
+    const a = v.mixer.clipAction(clip);
+    a.alias = ALIAS[name] || null;
+    return (v.actions[key] = a);
   }
   function switchTo(v, a, fade, loop) {
     if (v.cur === a) return;
@@ -5081,7 +5260,7 @@
     const a = getAction(v, name);
     if (!a) return false;
     switchTo(v, a, fade === undefined ? 0.18 : fade, true);
-    a.timeScale = speed;
+    a.timeScale = a.alias && a.alias.rev ? -speed : speed;
     return true;
   }
   function onceAnim(v, name, speed, fade) {
@@ -5091,7 +5270,7 @@
     a.timeScale = speed;
     return true;
   }
-  // O tempo do clipe é dirigido pela simulação: times (s) → fracs (fração do clipe).
+  // O tempo do clipe é dirigido pela simulação: times (s) → fracs (fração da janela do movimento).
   function scrub(v, name, t, times, fracs, fade, alt) {
     const a = getAction(v, name, alt);
     if (!a) return false;
@@ -5103,8 +5282,11 @@
         break;
       }
     }
+    const w = a.alias && a.alias.w;
+    if (w) f = w[0] + f * (w[1] - w[0]);
     a.enabled = true; a.paused = false; a.timeScale = 0;
-    a.time = Math.min(f, 0.995) * a.getClip().duration;
+    a.time = clamp(f, 0, 0.995) * a.getClip().duration;
+    if (a.alias && a.alias.yaw) v.yawMove = true;
     return true;
   }
   function dodgeClip(face, vx, vy) {
@@ -5113,16 +5295,28 @@
     if (Math.abs(rel) > 2.35) return 'Dodge_Backward';
     return rel > 0 ? 'Dodge_Right' : 'Dodge_Left';
   }
-  // Andar/correr/lateral/ré conforme a direção do movimento em relação ao rosto.
+  // Andar/trotar/correr conforme a velocidade. Captura só tem passos para a frente:
+  // de lado o corpo gira para a direção do passo; de ré, o andar toca ao contrário.
   function locomotion(v, vx, vy, face, idle) {
     const sp = len(vx, vy), k = v.scale;
     if (sp < 22) { loopAnim(v, idle, 1, 0.2); return; }
     const rel = angDiff(face, Math.atan2(vy, vx));
-    if (Math.abs(rel) < 0.8) {
-      if (sp > 150 * k) loopAnim(v, 'Running_A', clamp(sp / (230 * k), 0.7, 1.7), 0.18);
-      else loopAnim(v, 'Walking_A', clamp(sp / (100 * k), 0.6, 1.6), 0.18);
-    } else if (Math.abs(rel) > 2.3) loopAnim(v, 'Walking_Backwards', clamp(sp / (95 * k), 0.6, 1.7), 0.18);
-    else loopAnim(v, rel > 0 ? 'Running_Strafe_Right' : 'Running_Strafe_Left', clamp(sp / (200 * k), 0.6, 1.6), 0.18);
+    if (Math.abs(rel) > 2.3 && sp < 170 * k) { loopAnim(v, 'Walking_Backwards', clamp(sp / (60 * k), 0.6, 1.8), 0.18); return; }
+    if (Math.abs(rel) >= 0.35) v.yawT = rel;
+    if (sp > 165 * k) loopAnim(v, 'Running_B', clamp(sp / (215 * k), 0.75, 1.5), 0.18);
+    else if (sp > 75 * k) loopAnim(v, 'Running_A', clamp(sp / (120 * k), 0.7, 1.5), 0.18);
+    else loopAnim(v, 'Walking_A', clamp(sp / (58 * k), 0.6, 1.6), 0.18);
+  }
+  // Giro visual do corpo (passo lateral, esquiva, golpe giratório) somado ao rosto da simulação
+  function bodyYaw(v, dt) {
+    v.yaw += angDiff(v.yaw, v.yawT) * Math.min(1, dt * (v.yawMove ? 22 : 10));
+    if (v.spinRate) v.spin += v.spinRate * dt;
+    else if (v.spinTo !== undefined) v.spin = v.spinTo;
+    else v.spin -= angDiff(0, v.spin) * Math.min(1, dt * 12);
+    v.spinRate = 0; v.spinTo = undefined; v.yawMove = false;
+    const r = v.yaw + v.spin;
+    v.yawT = 0;
+    return r;
   }
   function tint(v, mode) {
     if (v.tintMode === mode) return;
@@ -5173,6 +5367,8 @@
       case 'attack': {
         const a = P.atk;
         scrub(v, a.clip, P.t, atkTimes(a), markOf(a.clip), 0.06, v.alt);
+        // golpe giratório: o corpo dá a volta inteira durante o golpe
+        if (ALIAS[a.clip] && ALIAS[a.clip].spin) v.spinTo = -(P.swingSide || 1) * TAU * easeOut(clamp((P.t - a.wind * 0.6) / (a.active + a.wind * 0.4), 0, 1));
         break;
       }
       case 'charge': { const c = set.charge, M = markOf(c.clip); scrub(v, c.clip, P.t, [0, CHARGE_MAX], [M[0], lerp(M[0], M[1], 0.75)], 0.08, v.alt); break; }
@@ -5190,7 +5386,10 @@
         scrub(v, name, P.t, [0, EXEC.hitT - 0.06, EXEC.hitT + 0.06, EXEC.dur], M, 0.06, v.alt);
         break;
       }
-      case 'dash': scrub(v, v.dashClip, P.t, [0, dashT()], [0.02, 0.9], 0.05, v.alt); break;
+      case 'dash': // rola na direção do deslize
+        scrub(v, v.dashClip, P.t, [0, dashT()], [0.0, 1.0], 0.05, v.alt);
+        v.yawT = angDiff(P.face, Math.atan2(P.dashY, P.dashX));
+        break;
       case 'parry': scrub(v, 'Block', P.t, [0, 0.08, PL.parryTime], [0.02, 0.25, 0.4], 0.04, v.alt); break;
       case 'guard': if (P.blockHitT > 0) scrub(v, 'Block_Hit', 0.2 - P.blockHitT, [0, 0.2], [0.05, 0.6], 0.03, v.alt); else loopAnim(v, 'Blocking', 1, 0.1); break;
       case 'stance': loopAnim(v, 'Blocking', 1.5, 0.1); break;
@@ -5204,7 +5403,7 @@
       default: locomotion(v, P.vx, P.vy, P.face, Wd.idle);
     }
     v.mixer.update(dt);
-    v.root.rotation.y = Math.PI / 2 - faceOf(P);
+    v.root.rotation.y = Math.PI / 2 - faceOf(P) - bodyYaw(v, dt);
     v.root.position.y = P.z * U;
     applyFlinch(v, P, P.face);
     tint(v, P.state === 'stance' ? 'parry' : P.parryT > 0 ? 'parry' : P.state === 'charge' && P.chargeLv > 1 ? 'charge' + P.chargeLv
@@ -5311,7 +5510,7 @@
         case 'grabLunge': case 'charge': loopAnim(v, 'Running_B', 1.5, 0.08); break;
         case 'grabHold': scrub(v, 'Spellcast_Raise', p, [0, 0.8, 1], [0.12, 0.3, 0.25], 0.1, v.alt); break;
         case 'spinWind': scrub(v, '2H_Melee_Attack_Spin', p, [0, 1], [0.05, 0.22], 0.1, v.alt); break;
-        case 'spin': loopAnim(v, '2H_Melee_Attack_Spinning', 1.6, 0.05); break;
+        case 'spin': loopAnim(v, '2H_Melee_Attack_Spinning', 1.4, 0.05); v.spinRate = -11; break;
         case 'recover':
           if (v.prevState === 'slamWind') scrub(v, '2H_Melee_Attack_Chop', p, [0, 0.12, 1], [M[1], M[2], M[3]], 0.04, v.alt);
           else scrub(v, '2H_Melee_Attack_Stab', p, [0, 1], [0.26, 0.85], 0.1, v.alt);
@@ -5361,7 +5560,7 @@
           if (def.undead) loopAnim(v, 'Skeleton_Inactive_Standing_Pose', 1, 0.2);
           else scrub(v, 'Hit_B', p, [0, 0.15, 1], [0, 0.45, 0.5], 0.08, v.alt);
           break;
-        case 'dodge': scrub(v, v.dodgeClip, p, [0, 1], [0.02, 0.85], 0.05, v.alt); break;
+        case 'dodge': scrub(v, v.dodgeClip, p, [0, 1], [0.0, 1.0], 0.05, v.alt); v.yawT = angDiff(e.face, Math.atan2(e.vy, e.vx)); break;
         case 'air': case 'grabbed': scrub(v, 'Hit_B', 0.3, [0, 1], [0, 1], 0.06, v.alt); tumble = e.state === 'air' ? clamp(-e.vz / 900, -0.6, 0.9) : 0.3; break;
         case 'thrown': scrub(v, 'Death_A', p, [0, 1], [0.1, 0.5], 0.05, v.alt); tumble = 0.8; break;
         case 'down': scrub(v, 'Death_A', p * e.stTotal, [0, 0.3], [0.35, 0.97], 0.06, v.alt); break;
@@ -5375,10 +5574,10 @@
       }
     }
     v.mixer.update(e.frozenT > 0 ? 0 : dt);
-    v.root.rotation.y = Math.PI / 2 - faceOf(e);
+    v.root.rotation.y = Math.PI / 2 - faceOf(e) - bodyYaw(v, e.frozenT > 0 ? 0 : dt);
     // enterrado espera sob o chão; o esqueleto sobe com a própria animação de despertar
     v.root.position.y = (e.state === 'lurk' && e.buried ? -v.height * 1.2 : e.state === 'spawn' && !def.undead ? -v.height * 1.05 * (1 - easeOut(p)) : 0) + (e.z || 0) * U;
-    if (v.gun) {
+    if (v.gun && !v.gunInHand) {
       const aiming = e.state === 'aim';
       v.gun.position.set(-0.18, aiming ? 1.28 : 0.95, aiming ? 0.25 : 0.2);
       v.gun.rotation.x = aiming ? 0 : 0.7;
@@ -5414,9 +5613,8 @@
   scene.add(playerView.root);
   // troca de herói/arma: refaz o modelo ou só as armas visíveis
   function setHeroWeapons(v) {
-    if (!v || !v.weaponNodes) return;
-    const show = (WEAPONS[P.weapon] || {}).show || [];
-    for (const o of v.weaponNodes) o.visible = show.includes(o.name);
+    if (!v || !v.gear) return;
+    setGear(v, (WEAPONS[P.weapon] || {}).gear);
   }
   function onHeroChanged() {
     if (!playerView || playerView.heroKey !== heroModel()) {
@@ -6743,7 +6941,14 @@
     add(geo('gunBand', () => new THREE.TorusGeometry(0.05, 0.015, 6, 12)), brass, 0, 0.03, 0.35);
     add(geo('gunMuzzle', () => new THREE.CylinderGeometry(0.055, 0.045, 0.1, 10).rotateX(Math.PI / 2)), brass, 0, 0.03, 1.05);
     add(geo('gunLock', () => new THREE.BoxGeometry(0.05, 0.08, 0.14)), brass, 0.06, 0.04, 0.05);
-    v.root.add(g);
+    if (v.isModel && v.bones && v.bones.hand_r) { // na mão direita: cano ao longo do antebraço
+      const bs = v.bones.hand_r.getWorldScale(new THREE.Vector3()).x / v.root.scale.x || 1;
+      const holder = new THREE.Group();
+      holder.rotation.set(0, 0, -HPI); holder.scale.setScalar(0.8 / bs);
+      g.rotation.x = -HPI; g.position.set(0, 0.05, 0.02);
+      holder.add(g); v.bones.hand_r.add(holder);
+      v.gunInHand = true;
+    } else v.root.add(g);
     v.gun = g;
   }
 

@@ -1,14 +1,19 @@
 # Créditos dos recursos
 
-## Personagens, armas e cenário — KayKit, por Kay Lousberg (www.kaylousberg.com) · CC0 1.0
-- **KayKit Adventurers Character Pack 1.0** — `knight.glb` (Selen), `barbarian.glb` (Orsa e Rompe-Muralha),
-  `gunner.glb` (Ilan, Arcabuzeiro e Granadeiro), `rogue.glb` (Sussurro), `mage.glb` (Aurel), `bomb.glb`
-  https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0
-- **KayKit Skeletons Character Pack 1.0** — `skeleton_warrior.glb`, `skeleton_rogue.glb`, `boss.glb` (Vezmir e Capelão),
-  armas `skeleton_*.glb`, `boss_staff.glb` e a biblioteca de animações `anims.glb` (60 clipes, mesmo esqueleto para todos)
-  https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0
+## Personagens, animações e armas — Quaternius (quaternius.com) · CC0 1.0
+- **Universal Base Characters** — `h/head_f.glb`, `h/head_m.glb` (corpo-base cortado no pescoço: rosto, olhos e sobrancelhas)
+  e os cabelos `h/hair_*.glb`
+- **Modular Character Outfits – Fantasy** — roupas `h/ranger_f/m.glb` e `h/peasant_f/m.glb`; as texturas `h/tex_*.jpg`
+  são as originais e tingimentos feitos a partir delas (carmesim, noite, guilda, azul, ferro)
+- **Universal Animation Library** e **Universal Animation Library 2** — `h/anims_h.glb`: 56 clipes de captura de movimento
+  (golpes de espada, combo pesado, esquiva rolando, socos, magia, arremesso, dano, queda e levantar), um esqueleto só para todos
+- **Lowpoly Medieval Weapons** — `h/w_*.glb` (espada, montante, machados, adaga, martelo, arco e escudos)
+  https://quaternius.com · https://quaternius.itch.io
+
+## Cenário — KayKit, por Kay Lousberg (www.kaylousberg.com) · CC0 1.0
 - **KayKit Dungeon Remastered 1.0** — `dungeon.glb` (26 peças reunidas num arquivo)
   https://github.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0
+- **KayKit Adventurers Character Pack 1.0** — `bomb.glb`
 
 Otimizados com glTF-Transform (só o que o jogo usa, compressão meshopt).
 
