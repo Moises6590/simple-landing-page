@@ -162,3 +162,11 @@ node standalone.mjs desktop && cd desktop-lite && node build.mjs && npx @neutral
 - **Muros do mapa sob medida**: os muros e parapeitos que bloqueiam a passagem são gerados no tamanho exato de cada obstáculo, com a textura na escala real, e reunidos numa só malha por material.
 - As texturas ocupam uma escala fixa em metros em todas as peças, então pedra e madeira têm o mesmo tamanho em qualquer lugar.
 
+### Build 11: qualidade máxima e downloads
+
+- **Personagens em qualidade total**: malhas completas (sem redução de polígonos) e texturas em 2K (cabelo em 1K), inclusive os tingimentos das roupas.
+- **Cenário em 2K**: as texturas fotográficas de pedra, terra, madeira e ferro passaram de 1K para 2K.
+- **Trilha na qualidade original** (160 kb/s) no Windows e na web.
+- **Android ajustado ao celular**: o empacotador reduz as texturas para 1K e os personagens para menos polígonos só no APK, porque o celular não tem memória de vídeo para tudo em 2K.
+- **Downloads pelo GitHub Releases**: o workflow `pacotes.yml` compila o APK e o pacote do Windows nos servidores do GitHub e publica na Release `build-N`. Links fixos para a versão mais recente estão em [`releases/LEIA-ME.md`](releases/LEIA-ME.md). O APK usa uma assinatura fixa, então cada versão instala por cima da anterior.
+

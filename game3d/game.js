@@ -4897,7 +4897,7 @@
   const ASSET_BASE = 'assets/';
   // Página autocontida: modelos (JSON) e texturas (data URI) podem vir embutidos em window.__ASSETS
   const EMBED = window.__ASSETS || null;
-  const BUILD = 'build 10 · cenário realista';
+  const BUILD = 'build 11 · qualidade máxima';
   const ANIM_FILE = 'h/anims_h.glb';
   // texturas fotográficas do cenário (m = metros cobertos por uma repetição) e rochas escaneadas
   const ENV_TEX = {

@@ -43,3 +43,29 @@ public class MainActivity extends BridgeActivity {
 }
 `);
 console.log('android: paisagem + imersivo + tela acesa');
+
+// Assinatura fixa (a mesma dos pacotes anteriores: a versão nova instala por cima sem perder o progresso)
+// e número de versão vindo de releases/VERSION.
+const gradle = path.join(__dirname, 'android/app/build.gradle');
+const build = (() => { try { return parseInt(fs.readFileSync(path.join(__dirname, '../../releases/VERSION'), 'utf8'), 10) || 1; } catch (_) { return 1; } })();
+let g = fs.readFileSync(gradle, 'utf8').replace(/\n\/\/ lamina-rubra:início[\s\S]*\/\/ lamina-rubra:fim\n/, '\n');
+g += `
+// lamina-rubra:início
+android {
+    signingConfigs {
+        debug {
+            storeFile file('../../signing/lamina-debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+    defaultConfig {
+        versionCode ${build}
+        versionName "build ${build}"
+    }
+}
+// lamina-rubra:fim
+`;
+fs.writeFileSync(gradle, g);
+console.log('android: assinatura fixa, versão ' + build);

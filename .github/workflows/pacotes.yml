@@ -1,0 +1,80 @@
+# Compila o APK (Android) e o pacote do Windows e publica numa Release do GitHub.
+# Roda quando releases/VERSION muda (ou manualmente). Os arquivos da Release podem ter até 2 GB,
+# então os pacotes levam a qualidade máxima (texturas 2K no Windows, trilha original).
+name: Pacotes (Android e Windows)
+on:
+  push:
+    branches: [main, master, 'claude/**']
+    paths: [releases/VERSION]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: pacotes-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  pacotes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Versão
+        run: echo "BUILD=$(tr -dc 0-9 < releases/VERSION)" >> "$GITHUB_ENV"
+      - name: Dependências
+        run: |
+          cd tools && npm install --no-audit --no-fund
+          cd android && npm install --no-audit --no-fund
+      - name: Windows (Neutralino + WebView2)
+        run: |
+          cd tools
+          node standalone.mjs desktop
+          node icon/make.mjs
+          cd desktop-lite
+          node build.mjs
+          npx -y @neutralinojs/neu@11 update
+          npx -y @neutralinojs/neu@11 build
+          cd dist/LaminaRubra
+          mkdir LaminaRubra-Windows
+          cp LaminaRubra-win_x64.exe "LaminaRubra-Windows/Lamina Rubra.exe"
+          cp resources.neu LaminaRubra-Windows/
+          printf 'Lâmina Rubra — As Cinzas de Ferrumbra (build %s)\r\n\r\nAbra "Lamina Rubra.exe". Mantenha o arquivo resources.neu na mesma pasta.\r\nRequer Windows 10 ou 11 (usa o Microsoft Edge WebView2, que já vem instalado).\r\nSe o Windows SmartScreen avisar, clique em "Mais informações" > "Executar assim mesmo".\r\n\r\nPersonagens e animações: Quaternius (CC0). Cenário: Poly Haven (CC0). Música: Kevin MacLeod (incompetech.com), CC BY 4.0.\r\n' "$BUILD" > LaminaRubra-Windows/LEIA-ME.txt
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          zip -qr "$GITHUB_WORKSPACE/out/LaminaRubra-Windows.zip" LaminaRubra-Windows
+      - name: Android (Capacitor)
+        run: |
+          cd tools
+          node standalone.mjs android
+          cd android
+          npx cap add android
+          node patch-android.cjs
+          npx cap sync android
+          node ../icon/make.mjs
+          cd android
+          ./gradlew assembleDebug --no-daemon -q
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/out/LaminaRubra-Android.apk"
+      - name: Tamanhos
+        run: ls -la out
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ env.BUILD }}
+          name: Lâmina Rubra — build ${{ env.BUILD }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          files: out/*
+          body: |
+            **Lâmina Rubra — As Cinzas de Ferrumbra**, build ${{ env.BUILD }}.
+
+            | Arquivo | Plataforma | Como instalar |
+            |---|---|---|
+            | `LaminaRubra-Android.apk` | Android 6+ | Abra no celular e permita "instalar apps de fontes desconhecidas". Instala por cima da versão anterior sem perder o progresso. |
+            | `LaminaRubra-Windows.zip` | Windows 10/11 | Extraia e abra `Lamina Rubra.exe` (deixe o `resources.neu` ao lado). |
+
+            Personagens e animações: Quaternius (CC0) · Cenário: Poly Haven (CC0) · Música: Kevin MacLeod (incompetech.com), CC BY 4.0.

@@ -12,8 +12,9 @@ import { fileURLToPath } from 'url';
 import * as esbuild from 'esbuild';
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, EXTMeshoptCompression } from '@gltf-transform/extensions';
-import { quantize } from '@gltf-transform/functions';
-import { MeshoptDecoder } from 'meshoptimizer';
+import { quantize, weld, simplify, textureCompress } from '@gltf-transform/functions';
+import { MeshoptDecoder, MeshoptSimplifier } from 'meshoptimizer';
+import sharp from 'sharp';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const game = path.join(here, '..', 'game3d');
@@ -27,15 +28,24 @@ fs.mkdirSync(outDir, { recursive: true });
 const three = (await esbuild.build({ entryPoints: [path.join(here, 'three-entry.mjs')], bundle: true, minify: true, format: 'iife', write: false })).outputFiles[0].text;
 
 // 2) Modelos: tira a compressão meshopt (que exigiria WASM) e mantém a quantização
-await MeshoptDecoder.ready;
+await MeshoptDecoder.ready; await MeshoptSimplifier.ready;
+// Android: celular não tem memória de vídeo para tudo em 2K → texturas 1K e personagens com menos polígonos.
+// Windows e web levam a qualidade máxima dos arquivos originais.
+const MOBILE = target === 'android';
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.decoder': MeshoptDecoder });
 const models = {}, human = {};
 const glb = async (p) => {
   const doc = await io.read(p);
   for (const ext of doc.getRoot().listExtensionsUsed()) if (ext.extensionName === EXTMeshoptCompression.EXTENSION_NAME) ext.dispose();
+  const f = path.basename(p);
+  if (MOBILE && doc.getRoot().listTextures().length) {
+    if (/^(head|ranger|peasant|hair)/.test(f)) await doc.transform(weld({ tolerance: 0.0001 }), simplify({ simplifier: MeshoptSimplifier, ratio: f.startsWith('head') ? 0.7 : f.startsWith('hair') ? 0.6 : 0.55, error: 0.004, lockBorder: true }));
+    await doc.transform(textureCompress({ encoder: sharp, resize: f.startsWith('hair') || f.startsWith('rock') ? [512, 512] : [1024, 1024] }));
+  }
   await doc.transform(quantize({ quantizeNormal: 10, quantizePosition: 14 }));
   return Buffer.from(await io.writeBinary(doc)).toString('base64');
 };
+const jpg = async (p) => (MOBILE ? (await sharp(p).resize(1024, 1024, { fit: 'inside' }).jpeg({ quality: /_nor/.test(p) ? 88 : 82, mozjpeg: true }).toBuffer()) : fs.readFileSync(p)).toString('base64');
 for (const f of fs.readdirSync(path.join(game, 'assets')).filter((f) => f.endsWith('.glb'))) {
   if (f === 'bomb.glb') models[f] = await glb(path.join(game, 'assets', f));
 }
@@ -43,7 +53,7 @@ for (const f of fs.readdirSync(path.join(game, 'assets')).filter((f) => f.endsWi
 for (const f of fs.readdirSync(path.join(game, 'assets', 'h'))) {
   const p = path.join(game, 'assets', 'h', f);
   if (f.endsWith('.glb')) human['h/' + f] = await glb(p);
-  else if (f.endsWith('.jpg')) human['h/' + f] = fs.readFileSync(p).toString('base64');
+  else if (f.endsWith('.jpg')) human['h/' + f] = await jpg(p);
 }
 
 // 3) Recursos extras em scripts ao lado da página (cada um abaixo de 16 MB)
@@ -63,7 +73,7 @@ const world = {};
 for (const f of fs.readdirSync(path.join(game, 'assets', 'env3d'))) {
   const p = path.join(game, 'assets', 'env3d', f);
   if (f.endsWith('.glb')) world['env3d/' + f] = await glb(p);
-  else if (f.endsWith('.jpg')) world['env3d/' + f] = fs.readFileSync(p).toString('base64');
+  else if (f.endsWith('.jpg')) world['env3d/' + f] = await jpg(p);
 }
 console.log('assets_h.js', writeAssets('assets_h.js', human));
 console.log('assets_world.js', writeAssets('assets_world.js', world));
@@ -72,10 +82,10 @@ console.log('assets_env.js', writeAssets('assets_env.js', env));
 
 // 4) Trilha: arquivos mp3 (tocados em streaming, não entram na memória de uma vez)
 fs.mkdirSync(path.join(outDir, 'audio', 'music'), { recursive: true });
-// Nos pacotes a trilha é recodificada (Android 112 kb/s, Windows 128 kb/s: arquivos abaixo de 100 MB) se houver ffmpeg (variável LR_FFMPEG)
+// Trilha na qualidade original; no Android pode ser recodificada a 128 kb/s se houver ffmpeg (variável LR_FFMPEG)
 for (const f of fs.readdirSync(path.join(game, 'audio', 'music')).filter((f) => f.endsWith('.mp3'))) {
   const src = path.join(game, 'audio', 'music', f), dst = path.join(outDir, 'audio', 'music', f);
-  if (target !== 'web' && process.env.LR_FFMPEG) execFileSync(process.env.LR_FFMPEG, ['-v', 'error', '-y', '-i', src, '-codec:a', 'libmp3lame', '-b:a', target === 'android' ? '112k' : '128k', dst]);
+  if (MOBILE && process.env.LR_FFMPEG) execFileSync(process.env.LR_FFMPEG, ['-v', 'error', '-y', '-i', src, '-codec:a', 'libmp3lame', '-b:a', '128k', dst]);
   else fs.copyFileSync(src, dst);
 }
 
