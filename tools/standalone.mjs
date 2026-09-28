@@ -4,7 +4,7 @@
 //   desktop → desktop/app/       (qualidade padrão Ultra)
 //   android → android/www/       (qualidade padrão Média)
 // index.html traz Three.js, o jogo e os modelos embutidos; os recursos grandes vão em arquivos ao lado:
-//   assets_h.js (personagens e animações) · assets_world.js (cenário) · assets_sfx.js (efeitos + partículas) · assets_env.js (HDRIs) · audio/music/*.mp3 (trilha, tocada em streaming)
+//   assets_h.js (personagens e animações) · assets_world.js (cenário) · assets_sfx.js (efeitos, vozes e partículas) · assets_env.js (HDRIs) · audio/music/*.mp3 (trilha, tocada em streaming)
 import fs from 'fs';
 import { execFileSync } from 'child_process';
 import path from 'path';
@@ -65,6 +65,7 @@ const writeAssets = (name, obj) => {
 };
 const sfx = {};
 for (const f of fs.readdirSync(path.join(game, 'audio', 'sfx')).filter((f) => f.endsWith('.mp3'))) sfx['sfx/' + f] = b64(path.join(game, 'audio', 'sfx', f));
+for (const f of fs.readdirSync(path.join(game, 'audio', 'vox')).filter((f) => f.endsWith('.mp3'))) sfx['vox/' + f] = b64(path.join(game, 'audio', 'vox', f));
 for (const f of fs.readdirSync(path.join(game, 'assets', 'fx')).filter((f) => f.endsWith('.png'))) sfx['fx/' + f] = b64(path.join(game, 'assets', 'fx', f));
 const env = {};
 for (const f of fs.readdirSync(path.join(game, 'assets', 'env')).filter((f) => f.endsWith('.hdr'))) env['env/' + f] = b64(path.join(game, 'assets', 'env', f));

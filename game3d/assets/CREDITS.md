@@ -64,3 +64,27 @@ http://creativecommons.org/licenses/by/4.0/ — os títulos abaixo, licenciados 
 | trial_2.mp3 | "Stormfront" |
 
 Para vender o jogo, mantenha estes créditos na tela final (já estão lá) e na página da loja.
+
+## Vozes — gravações de pessoas (nada sintetizado), em `audio/vox/`
+Grunhidos, gritos de esforço, dor, morte, risadas e cânticos; nenhum trecho com palavras (cada corte passou por
+reconhecimento de fala e os que tinham fala foram descartados). Cortadas, com silêncio removido e volume igualado.
+
+| Autor (OpenGameArt) | Pacote | Licença | Onde |
+|---|---|---|---|
+| VoiceBosch (SoundBiter SFX) | Effort, Damage e Death Sounds (Male) | CC BY-SA 4.0 | Ilan; dor e morte da Guilda; morte dos Rompe-Muralhas |
+| AuraVoice (Nocturnal_Vanguard) | Female Hurt Grunts & Groans · Female Exasperated Yell · Maniacal Laughter Pack 1 | CC0 | Selen, Orsa, Sussurros |
+| SkyRae | Female Warrior Grunts (CC BY 3.0) · Female Warrior Cheer (CC0) | CC BY 3.0 / CC0 | Selen, Orsa, Sussurros |
+| cicifyre | Female RPG Voice Starter Pack (só ataque, dano e pulo) | CC0 | Selen, Orsa |
+| JeanMyna_VA | Death/Dying Female Fighter | CC BY 3.0 | morte de Selen e Orsa |
+| congusbongus | Female screams | CC BY 3.0 | morte de Selen, Orsa e Sussurros |
+| qubodup | 15 vocal male strain/hurt/pain/jump · Ghost Monster Voice | CC0 | Aurel; cânticos do Capelão e de Vezmir |
+| Michel Baradari | 11 male human pain/death sounds | CC BY 3.0 | dor e morte de Aurel |
+| HaelDB | Male Grunt/Yelling sounds (4 vozes) | CC0 | Arcabuzeiros e Granadeiros |
+| Little Robot Sound Factory | Voices Sound Effects Library (Orc, Zombie, Demon, Human) | CC BY 3.0 | Ossários, Rompe-Muralhas, Vezmir, Guilda |
+| AntumDeluge | Undead Moans | CC0 | Ossários |
+| Darsycho | Zombie moans · Hungry ghoul | CC0 | Ossários |
+| StarNinjas | 16 Monster Growls | CC0 | Ossários |
+| Exewin · Badre-Eddine | Death sounds · Hurt/Death sound effect for character | CC0 | dor e morte da Guilda |
+
+Os sons CC BY-SA 4.0 (VoiceBosch) continuam sob a mesma licença dentro do jogo.
+

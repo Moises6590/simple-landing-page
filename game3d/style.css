@@ -279,6 +279,12 @@ body.cine #touch, body.cine #pauseBtn { display: none !important; }
 @keyframes card { 0% { opacity: 0; transform: translateY(8px); } 15% { opacity: 1; transform: none; } 75% { opacity: 1; } 100% { opacity: 0; } }
 #objective { position: fixed; top: calc(12px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 3; color: #e8ecf4; font-size: 0.82rem; letter-spacing: 0.08em; background: rgba(8, 9, 13, 0.45); padding: 5px 12px; border-radius: 999px; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
 #objective.on { opacity: 1; }
+#objective { display: flex; flex-direction: column; align-items: center; gap: 1px; border-radius: 10px; padding: 5px 16px 6px; max-width: min(92vw, 560px); text-align: center; border: 1px solid rgba(255, 207, 106, 0.25); }
+#objective small { font-size: 0.62rem; letter-spacing: 0.22em; color: #ffcf6a; font-weight: 800; }
+#objective span { font-size: 0.86rem; letter-spacing: 0.03em; }
+#objective.flash { animation: objFlash 1.6s ease-out; }
+@keyframes objFlash { 0% { box-shadow: 0 0 0 0 rgba(255, 207, 106, 0.9); background: rgba(90, 60, 10, 0.75); } 100% { box-shadow: 0 0 0 14px rgba(255, 207, 106, 0); } }
+@media (prefers-reduced-motion: reduce) { #objective.flash { animation: none; } }
 body:not(.playing) #objective, body.cine #objective { opacity: 0; }
 .tbtn[data-act="heal"] { right: calc(290px + env(safe-area-inset-right)); bottom: calc(22px + env(safe-area-inset-bottom)); }
 .tbtn[data-act="heal"] span { color: #6ef08a; }

@@ -169,8 +169,62 @@
       src.start(now);
       return true;
     }
+    // ---------- Vozes gravadas (grunhidos, gritos, dor e morte; sem falas) ----------
+    // audio/vox/<banco>_<n>.mp3 — carregadas por demanda: só as vozes do herói e dos inimigos do mapa atual
+    const VOX_COUNT = { selen_atk: 8, selen_big: 4, selen_die: 3, selen_hurt: 10, selen_jump: 3, orsa_atk: 7, orsa_big: 3, orsa_die: 3, orsa_hurt: 9, orsa_jump: 3, ilan_atk: 10, ilan_big: 10, ilan_die: 8, ilan_hurt: 10, ilan_jump: 6, aurel_atk: 10, aurel_big: 2, aurel_die: 3, aurel_hurt: 8, aurel_jump: 5, undead_alert: 10, undead_atk: 10, undead_die: 10, undead_hurt: 10, orc_alert: 10, orc_atk: 10, orc_die: 10, orc_hurt: 10, guild_alert: 10, guild_atk: 10, guild_die: 10, guild_hurt: 10, rogue_atk: 5, rogue_die: 4, rogue_hurt: 7, rogue_laugh: 7, ghost_chant: 5, boss_alert: 9, boss_atk: 10, boss_hurt: 7 };
+    const vbufs = {}, vloading = {}, vlast = {};
+    let voxBus = null, voxActive = 0;
+    const voxPlayed = {};
+    function loadVoiceBank(bank) {
+      if (!ac || vloading[bank] || !VOX_COUNT[bank]) return;
+      vloading[bank] = true; vbufs[bank] = [];
+      if (!voxBus) { voxBus = ac.createGain(); voxBus.gain.value = 1; voxBus.connect(master); }
+      const EMB = window.__ASSETS || {};
+      for (let i = 0; i < VOX_COUNT[bank]; i++) {
+        const key = 'vox/' + bank + '_' + i + '.mp3';
+        const got = EMB[key] ? Promise.resolve(b64buf(EMB[key])) : (location.protocol === 'file:' ? Promise.reject(new Error('file')) : fetch('audio/' + key).then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }));
+        got.then((ab) => new Promise((res, rej) => ac.decodeAudioData(ab, res, rej))).then((buf) => { vbufs[bank].push(buf); }).catch(() => {});
+      }
+    }
+    // voice('selen', 'hurt', x, y, { rate, vol, chance, prio })
+    function voice(who, kind, pan, dist, o) {
+      if (!ac || sfxVol() < 0.01) return false;
+      let bank = who + '_' + kind;
+      if (!VOX_COUNT[bank]) return false;
+      if (!vloading[bank]) { loadVoiceBank(bank); return false; }
+      const list = vbufs[bank];
+      if (!list.length) return false;
+      const now = ac.currentTime, prio = (o && o.prio) || 0;
+      if (voxActive >= 4 && prio < 2) return false; // muita gente gritando ao mesmo tempo: só o que importa
+      if (vlast[bank] && now - vlast[bank] < (o && o.gap !== undefined ? o.gap : 0.16)) return false;
+      vlast[bank] = now;
+      const src = ac.createBufferSource(); src.buffer = list[Math.floor(Math.random() * list.length)];
+      src.playbackRate.value = ((o && o.rate) || 1) * (0.96 + Math.random() * 0.08);
+      const g = ac.createGain();
+      const att = dist ? clamp(1 - (dist - 300) / 1200, 0.15, 1) : 1;
+      g.gain.value = ((o && o.vol) || 0.85) * sfxVol() * att;
+      let node = src; node.connect(g); node = g;
+      if (pan && ac.createStereoPanner) { const p = ac.createStereoPanner(); p.pan.value = clamp(pan, -0.85, 0.85); node.connect(p); node = p; }
+      node.connect(voxBus);
+      voxActive++; voxPlayed[bank] = (voxPlayed[bank] || 0) + 1; src.onended = () => { voxActive--; };
+      src.start(now);
+      return true;
+    }
     return {
       init() { init(); loadSamples(); },
+      // carrega as vozes que o mapa vai usar (herói + inimigos)
+      voices(prefixes) { if (!ac) return; for (const b in VOX_COUNT) if (prefixes.includes(b.split('_')[0])) loadVoiceBank(b); },
+      voice(who, kind, x, y, o) {
+        if (!ac) return false;
+        let pan = 0, dist = 0;
+        if (x !== undefined && typeof P !== 'undefined') {
+          const dx = x - P.x, dy = y - P.y; dist = Math.hypot(dx, dy);
+          const rel = angDiff(CAMERA.yaw, Math.atan2(dy, dx));
+          pan = Math.sin(rel) * Math.min(1, dist / 220);
+        }
+        if (o && o.chance !== undefined && Math.random() > o.chance) return false;
+        return voice(who, kind, pan, dist, o);
+      },
       resume() { if (ac && ac.state === 'suspended') ac.resume(); },
       // play(nome) ou play(nome, x, y) — com posição no mundo: estéreo e distância a partir do jogador/câmera
       play(name, x, y) {
@@ -185,7 +239,7 @@
         if (sfx[name] && sfxVol() > 0.01) sfx[name]();
       },
       get ctx() { return ac; },
-      stats() { let n = 0, t = 0; for (const k in bufs) { t++; if (bufs[k].length) n++; } return { names: t, loaded: n, state: ac ? ac.state : 'none' }; },
+      stats() { let n = 0, t = 0; for (const k in bufs) { t++; if (bufs[k].length) n++; } return { names: t, loaded: n, state: ac ? ac.state : 'none', voxBanks: Object.keys(vbufs).filter((k) => vbufs[k].length).length, voxPlayed }; },
     };
   })();
 
@@ -750,7 +804,17 @@
   function removeObstacle(ob) { const i = OBST.indexOf(ob); if (i >= 0) { OBST.splice(i, 1); worldChanged(); } }
   // golpe/explosão atingiu uma peça do cenário
   function hitProps(x, y, face, range, arc, dmg, heavy, omni) {
-    for (const ob of OBST) {
+    for (let i = OBST.length - 1; i >= 0; i--) {
+      const ob = OBST[i];
+      if (!ob) continue;
+      if (ob.goal) {
+        if (ob.ghp <= 0) continue;
+        const dg = len(ob.x - x, ob.y - y) - ob.r;
+        if (dg > range + 10) continue;
+        if (!omni && arc < TAU - 0.01 && Math.abs(angDiff(face, Math.atan2(ob.y - y, ob.x - x))) > arc / 2 + 0.45) continue;
+        damageGoalProp(ob, dmg, heavy);
+        continue;
+      }
       if (!ob.exp && !ob.crack) continue;
       if (ob.fuse !== undefined || ob.falling) continue;
       const d = len(ob.x - x, ob.y - y) - (ob.r || 0);
@@ -1371,6 +1435,28 @@
     return false;
   }
 
+  // ---------- Vozes (gravadas por pessoas; ninguém fala: só esforço, grito, dor e morte) ----------
+  const VOICE_OF = { grunt: ['undead', 1], shield: ['undead', 0.8], archer: ['undead', 1.15], chaplain: ['undead', 1.06],
+    brute: ['orc', 0.95], rogue: ['rogue', 1], gunner: ['guild', 1], grenadier: ['guild', 0.9], boss: ['boss', 0.9] };
+  const VOICE_KIND = { rogue: { alert: 'laugh' }, boss: { die: 'alert' } };
+  function enemyVoice(e, kind, o) {
+    const vv = VOICE_OF[e.type];
+    if (!vv) return;
+    const k = (VOICE_KIND[vv[0]] && VOICE_KIND[vv[0]][kind]) || kind;
+    Sound.voice(vv[0], k, e.x, e.y, Object.assign({ rate: vv[1] * (e.elite ? 0.92 : 1) * (e.mini ? 0.9 : 1) }, o));
+  }
+  // tom de cada herói (Orsa um pouco mais grave, Ilan um pouco mais agudo)
+  const HERO_RATE = { selen: 1, orsa: 0.9, ilan: 1.04, aurel: 0.97 };
+  function heroVoice(kind, o) {
+    const h = P.hero || 'selen';
+    const k = kind === 'big' && h === 'aurel' && Math.random() < 0.6 ? 'atk' : kind;
+    Sound.voice(h, k, undefined, undefined, Object.assign({ rate: HERO_RATE[h] || 1, vol: 0.8, prio: kind === 'die' || kind === 'hurt' ? 2 : 1 }, o));
+  }
+  function preloadVoices(types) {
+    const set = new Set([P.hero || 'selen']);
+    for (const t of types) { const vv = VOICE_OF[t]; if (vv) set.add(vv[0]); if (t === 'chaplain' || t === 'boss') set.add('ghost'); }
+    Sound.voices([...set]);
+  }
   function startAttack(a, mv, forced) {
     a = a || P.set.l1;
     const aim = forced ? { ang: Math.atan2(forced.y - P.y, forced.x - P.x), target: forced, dist: len(forced.x - P.x, forced.y - P.y) } : aimAssist(mv, a.range);
@@ -1385,6 +1471,9 @@
     if (a.air && aim.target) P.lungeScale = clamp((aim.dist - P.r - aim.target.r) / 160, 0.3, 1.6);
     if (a.riposte) { slowmo(0.45, 0.4); P.iframe = Math.max(P.iframe, a.wind + a.active + 0.05); if (P.hero === 'selen') P.atk = Object.assign({}, a, { dmg: a.dmg * 1.25 }); }
     P.threat = a.cast ? null : { id: ++threatId, kind: a.arc >= TAU - 0.01 ? 'heavy' : 'light', range: a.range, arc: a.arc };
+    // grito no golpe forte; no leve, só de vez em quando (senão cansa)
+    if (a.finisher || a.launch || a.guardBreak || a.riposte || a.slam) heroVoice('big', { chance: 0.85 });
+    else heroVoice('atk', { chance: a.cast ? 0.2 : 0.42, gap: 0.3 });
   }
   function startCharge(mv) {
     P.state = 'charge'; P.t = 0; P.actionId++;
@@ -1400,6 +1489,7 @@
     P.face = aim.ang; P.atkTarget = aim.target;
     P.st -= PL.heavyCost; P.stDelay = 0.7;
     P.comboWindow = 0; P.comboIdx = -1;
+    heroVoice('big', { chance: 0.9 });
     P.threat = P.hv.cast ? null : { id: ++threatId, kind: 'heavy', range: P.hv.range, arc: P.hv.arc };
   }
   function startExecute(e) {
@@ -1415,6 +1505,7 @@
     const names = { lava: 'NA LAVA!', wall: 'CONTRA A PAREDE!', back: 'PELAS COSTAS!', ground: 'NO CHÃO!', capture: 'BOMBARDA TOMADA!', front: 'EXECUÇÃO!' };
     addText(e.x, e.y - e.r - 30, names[P.execKind], '#ffcf4a', 20);
     camFx('exec', e, EXEC.dur + 0.15);
+    heroVoice('big', { prio: 2 });
   }
   function startDash(mv) {
     const D = H_().dash;
@@ -1439,6 +1530,7 @@
     }
     if (D.blink) { burst(P.x, P.y, 0, 14, '#8a8fa8', 220, true); Sound.play('blink'); }
     else Sound.play('dash');
+    heroVoice('jump', { chance: 0.3, gap: 0.5 });
   }
   function startParry(mv) {
     let best = null, bd = 260;
@@ -1474,6 +1566,7 @@
     P.state = 'special'; P.t = 0; P.actionId++;
     P.spec = { id, def, step: 0, hits: new Set(), targets: [], i: 0, x0: P.x, y0: P.y };
     P.threat = null;
+    heroVoice('big', { prio: 2 });
     const aim = aimAssist(mv, 300);
     P.face = aim.ang;
     P.spec.target = aim.target;
@@ -2099,6 +2192,7 @@
     G.hurtFlash = 0.35;
     hitstop(0.07, P, src.type ? src : null); shake(0.45);
     Sound.play('hurt'); vibrate(45);
+    if (P.hp > 0) heroVoice('hurt', { gap: 0.45, chance: dmg >= 12 ? 1 : 0.7 });
     burst(P.x, P.y, ang, 12, '#ff5a6a', 260);
     addText(P.x, P.y - 26, '-' + Math.round(dmg), '#ff5a6a', 18);
     if (armored) { P.iframe = 0.25; addText(P.x, P.y - 44, 'BLINDADA', '#ffb03c', 12); }
@@ -2123,6 +2217,7 @@
   }
 
   function playerDie() {
+    heroVoice('die', { prio: 3, gap: 0 });
     if (P.state === 'dead') return;
     if (P.grabbed) { P.grabbed = null; }
     P.hp = 0; P.state = 'dead'; P.lock = null; P.z = 0;
@@ -3226,6 +3321,13 @@
   }
 
   function updateEnemy(e, dt) {
+    if (e.state !== e.vPrev) { // a voz acompanha a mudança de estado
+      const prev = e.vPrev; e.vPrev = e.state;
+      if (prev === 'lurk' && e.state !== 'lurk') enemyVoice(e, 'alert', { chance: e.mini ? 1 : 0.35, gap: 0.5 });
+      else if ((e.state === 'windup' || e.state === 'slamWind' || e.state === 'chargeWind' || e.state === 'rushWind' || e.state === 'bashWind' || e.state === 'spinWind' || e.state === 'grabWind' || e.state === 'staffWind' || e.state === 'bossSlam') && !e.feint) enemyVoice(e, 'atk', { chance: e.boss || e.type === 'brute' ? 0.9 : 0.4, gap: 0.25 });
+      else if (e.state === 'raiseWind' || e.state === 'wardWind' || e.state === 'summonWind') Sound.voice('ghost', 'chant', e.x, e.y, { rate: e.boss ? 0.8 : 1, vol: 0.6, gap: 1 });
+      else if (e.state === 'spawn' && e.goalSpawn && TYPES[e.type].undead) enemyVoice(e, 'alert', { chance: 0.5, gap: 0.8 });
+    }
     e.flinchT -= dt;
     e.st -= dt; e.atkCd -= dt; e.dodgeCd -= dt; e.iframe -= dt; e.hitFlash -= dt; e.poiseDelay -= dt;
     e.guardBrokenT -= dt; e.frozenT -= dt; e.markT -= dt; e.fleeT -= dt; e.berserkT -= dt; e.execLock -= dt;
@@ -3402,6 +3504,12 @@
   function damageEnemy(e, dmg, ang, kb, poise, o) {
     if (e.dead || e.state === 'spawn' || (e.iframe > 0 && !o.lava)) return false;
     if (e.captured > 0 && !o.fromEnemy) return false;
+    e.bigHit = !!(o.heavy || o.finisher || kb >= 420);
+    if (e.boss && !o.fromEnemy && bossAnchored()) {
+      if (!e.anchorTxt || G.time - e.anchorTxt > 1.2) { e.anchorTxt = G.time; addText(e.x, e.y - e.r - 30, 'AS CORRENTES O PROTEGEM', '#ffb03c', 14); }
+      burst(e.x, e.y, ang + Math.PI, 8, '#ff8a3a', 240); Sound.play('clang', e.x, e.y);
+      return false;
+    }
     if (e.state === 'lurk') { if (e.buried) return false; triggerEncounter(e.enc, 'hit'); wakeEnemy(e); }
     const fromP = !o.fromEnemy;
     // ESCUDO: bloqueia golpes de frente (menos quebra-guarda, pesado nível 3, bombas e costas)
@@ -3434,7 +3542,9 @@
     if (o.mark) { e.markT = 6; }
     dmg = Math.round(dmg);
     e.hp -= dmg;
+    if (e.boss && e.phase === 1) e.hp = Math.max(e.hp, e.maxHp * 0.54); // a segunda fase sempre acontece
     e.hitFlash = 0.1;
+    if (e.hp > 0 && !e.isStatic) enemyVoice(e, 'hurt', { chance: e.bigHit || crit ? 0.8 : 0.45, gap: 0.2 });
     e.flinchT = FLINCH_TIME; e.flinchA = ang; e.flinchK = o.heavy || o.finisher ? 1.6 : 1;
     const km = e.isStatic ? 0 : kb / e.mass;
     if (e.state !== 'grabbed') { e.vx += Math.cos(ang) * km; e.vy += Math.sin(ang) * km; }
@@ -3508,6 +3618,7 @@
       if (P.flasks < P.maxFlasks) { P.flasks++; addText(P.x, P.y - 40, '+1 SEIVA', '#6ef08a', 14); Sound.play('pickup'); }
     }
     // o corpo fica: um Capelão pode reerguê-lo (a não ser que tenha sido executado ou destruído)
+    enemyVoice(e, 'die', { prio: 1, gap: 0.05, chance: e.boss || e.mini ? 1 : 0.8 });
     if (T.undead && !e.boss && !e.raised) G.corpses.push({ type: e.type, x: e.x, y: e.y, t: G.time, enc: e.enc, final: !!(e.executed || e.lavaKill) });
     if (e.type === 'drone' && !e.raised) G.corpses.push({ type: 'drone', x: e.x, y: e.y, t: G.time, enc: e.enc, final: !(G.enemies.some((o) => o.type === 'chaplain' && o.mini && !o.dead)) });
     if (!SAVE.seen[e.type]) { SAVE.seen[e.type] = true; persist(); }
@@ -3672,6 +3783,14 @@
       fonts: [{ x: -100, y: 520 }, { x: 720, y: 20 }],
       embers: [{ x: -1010, y: 640 }, { x: 1020, y: -640 }, { x: 450, y: -640 }],
       altar: { x: 880, y: 0 }, exit: { x: 1040, y: 0 },
+      goals: [
+        { kind: 'clear', encs: [0], text: 'Saia da cela: derrote os guardas' },
+        { kind: 'destroy', prop: 'chain', hp: 70, at: [[-560, -620], [180, -650], [760, 610]], text: 'Silencie o Sino dos Mortos: quebre as correntes',
+          startLine: 'Enquanto o sino tocar, os mortos continuam levantando. Três correntes o prendem à torre.',
+          lines: ['Uma corrente estala. O sino desafina.', 'A segunda corrente cede. O sino geme como gente.'],
+          doneLine: 'O sino cala. Quem ele chamou volta ao chão.', spawn: { type: 'grunt', every: 6.5, max: 3, collapse: true } },
+        { kind: 'clear', encs: [2], text: 'Derrote o Sargento Ossívio' },
+      ],
       encs: [
         { trigger: { start: 2.5 }, tactic: 'ring', maxMelee: 2, maxRanged: 1,
           caption: 'Os mortos da guarda ainda obedecem ao sino.',
@@ -3679,7 +3798,7 @@
         { trigger: { zone: [-60, -750, 360, 1500] }, tactic: 'pincer', maxMelee: 3, maxRanged: 1,
           caption: 'Eles saem da terra dos dois lados. Esperavam por você.',
           spawns: [Sp('grunt', 250, -380), Sp('grunt', 330, -300), Sp('grunt', 250, 380), Sp('grunt', 330, 300), Sp('archer', 920, -200), Sp('archer', 920, 200), Sp('shield', 780, -60)] },
-        { trigger: { after: 1, delay: 2 }, tactic: 'shadow', maxMelee: 3, maxRanged: 1,
+        { trigger: { goal: 2, delay: 1.5 }, tactic: 'shadow', maxMelee: 3, maxRanged: 1,
           caption: 'Uma sombra se move longe da luz das tochas.',
           spawns: [Sp('rogue', 620, -520, { cloak: true }), Sp('shield', 1020, 0, { awake: true, delay: 1, mini: 'Sargento Ossívio, o Primeiro a Levantar' }), Sp('grunt', 1020, -130, { awake: true, delay: 1.5 }), Sp('grunt', 1020, 130, { awake: true, delay: 2 }), Sp('archer', 720, 470)] },
       ],
@@ -3701,6 +3820,14 @@
       fonts: [{ x: -700, y: 560 }, { x: 560, y: 560 }],
       embers: [{ x: -1300, y: 620 }, { x: 320, y: -640 }, { x: 1320, y: 0 }],
       altar: { x: 1150, y: 0 }, exit: { x: 1360, y: 0 },
+      goals: [
+        { kind: 'clear', encs: [0], text: 'Atravesse a muralha: vença a emboscada' },
+        { kind: 'hold', fx: 'depot', r: 78, time: 3.2, at: [[1000, -540], [960, 560], [560, -150]], text: 'Sabote os depósitos de pólvora (fique no círculo)',
+          startLine: 'Os arcabuzes bebem de três depósitos de pólvora. Acenda cada um e saia de perto.',
+          lines: ['O primeiro depósito sobe em fogo e estilhaços.', 'O segundo explode. A torre inteira treme.', 'Sem pólvora, os arcabuzes viram porretes.'] },
+        { kind: 'destroy', prop: 'cage', hp: 150, at: [[1290, 0]], text: 'Arrombe a jaula da torre',
+          startLine: 'Numa jaula da torre, alguém bate as correntes no ritmo das Fossas.' },
+      ],
       encs: [
         { trigger: { zone: [-250, -700, 600, 1400] }, tactic: 'pincer', maxMelee: 3, maxRanged: 2,
           intro: 'Um Ossário sozinho na muralha. Sozinho demais.',
@@ -3712,7 +3839,7 @@
           spawns: [Sp('gunner', 1000, -300), Sp('gunner', 1120, 250), Sp('grenadier', 1180, -90, { mini: 'Mestra-Artilheira Brenna Fumaça' }), Sp('archer', 1000, 460), Sp('archer', 900, -470),
             Sp('shield', 880, -140), Sp('shield', 880, 170),
             Sp('grunt', 1330, -150, { awake: true, delay: 5 }), Sp('grunt', 1330, 150, { awake: true, delay: 5.5 }), Sp('grunt', 1330, 0, { awake: true, delay: 6 })] },
-        { trigger: { after: 1, delay: 2.5 }, tactic: 'ring', maxMelee: 2, maxRanged: 2,
+        { trigger: { goal: 2, delay: 1 }, tactic: 'ring', maxMelee: 2, maxRanged: 2,
           caption: 'O chão treme. Algo grande sobe a escada.',
           spawns: [Sp('brute', 1330, 0, { awake: true }), Sp('gunner', 800, -470, { awake: true }), Sp('gunner', 800, 470, { awake: true }), Sp('rogue', 400, 0, { cloak: true })] },
       ],
@@ -3733,6 +3860,12 @@
       fonts: [{ x: -1100, y: -240 }, { x: 200, y: 0 }, { x: 1020, y: -600 }],
       embers: [{ x: -1220, y: -820 }, { x: 610, y: -800 }, { x: 1220, y: 820 }],
       altar: { x: 1120, y: 180 }, exit: { x: 1240, y: -300 },
+      goals: [
+        { kind: 'hold', fx: 'valve', r: 72, time: 3.6, at: [[-560, -760], [-560, 760], [150, -800]], lava: [0, 1, 2], text: 'Feche as comportas de ferro (fique no círculo)',
+          startLine: 'Três comportas alimentam os rios de ferro. Feche-as e o caminho esfria.',
+          lines: ['A comporta range e fecha. O rio ao norte escurece e esfria.', 'O rio ao sul vira crosta.', 'O último canal seca. A Fundição inteira engasga.'] },
+        { kind: 'clear', encs: [1, 2], text: 'Derrote o Fornalheiro Gorvan' },
+      ],
       encs: [
         { trigger: { start: 2 }, tactic: 'ring', maxMelee: 2, maxRanged: 1,
           caption: 'A Bombarda mira onde você vai estar. Não onde está.',
@@ -3761,6 +3894,16 @@
       fonts: [{ x: -350, y: 620 }, { x: 900, y: -250 }],
       embers: [{ x: -1150, y: -760 }, { x: 1150, y: 700 }, { x: 1150, y: -760 }],
       altar: { x: 880, y: 560 }, exit: { x: 1170, y: 330 },
+      goals: [
+        { kind: 'destroy', prop: 'hive', hp: 90, at: [[-300, -660], [380, 660], [900, -690]], guarded: false, text: 'Destrua as colmeias de latão',
+          startLine: 'As vespas saem de colmeias presas ao teto. Enquanto elas existirem, o ninho não acaba.',
+          lines: ['Uma colmeia cai em pedaços de latão quente.', 'A segunda colmeia para de zumbir.'], doneLine: 'O zumbido morre. Sobram só as que já voavam.',
+          spawn: { type: 'drone', every: 7, max: 3, from: 'prop' } },
+        { kind: 'collect', item: 'record', at: [[-420, 650], [560, -210], [980, -560]], text: 'Recolha os registros de cobre da Guilda',
+          lines: ["'Carga: dezesseis lâminas da Ordem, apagadas. Destino: Fornalha-Mãe.'", "'A dezessete não se apaga. Levem-na viva até o Coração.'", "'Quando a brasa dela acender o Coração, Ferrumbra nunca mais esfria.' — V. C."] },
+        { kind: 'reach', at: [900, 550], r: 150, text: 'Investigue o altar da Guilda' },
+        { kind: 'clear', encs: [2], text: 'Derrote a Irmã Engrenagem' },
+      ],
       story: [{ zone: [700, 350, 400, 400], afterEnc: 1, lines: ['Um altar da Guilda. Um registro gravado em cobre:', "'Lâmina dezessete. Brasa da Mãe. Forjada por V. Caldaço. Para abrir o Coração.'", 'Ela não foi poupada. Foi escolhida.'] }],
       encs: [
         { trigger: { zone: [-800, -850, 900, 1700] }, tactic: 'swarm', maxMelee: 2, maxRanged: 1, maxDrone: 2,
@@ -3792,6 +3935,15 @@
       fonts: [{ x: -600, y: 0 }, { x: 520, y: 620 }],
       embers: [{ x: -1300, y: -800 }, { x: 0, y: -800 }, { x: 1300, y: 800 }],
       altar: { x: 1160, y: 0 }, exit: { x: 1360, y: 0 },
+      goals: [
+        { kind: 'collect', item: 'armor', at: [[-560, -790], [-120, 720], [300, -780]], text: 'Recupere as armaduras dos companheiros',
+          startLine: 'As armaduras da Ordem, penduradas como troféus. Ela não vai deixá-las aqui.',
+          lines: ['O elmo de Brand. Ainda tem o amassado do Passo Negro.', 'A ombreira de Mestra Iolanda, com a venda amarrada na fivela.', 'O escudo de Garrão. Os dentes marcados na borda são dele mesmo.'] },
+        { kind: 'hold', fx: 'brazier', r: 95, time: 9, at: [[460, 0]], text: 'Reacenda o Braseiro do Juramento (resista no círculo)',
+          startLine: 'O Braseiro do Juramento está apagado. Mantenha o círculo livre até a chama pegar.',
+          lines: ['A chama da Ordem sobe outra vez. Por um instante, o salão lembra quem era.'] },
+        { kind: 'clear', encs: [2], text: 'Derrote o Carrasco de Brasa' },
+      ],
       encs: [
         { trigger: { start: 2.5 }, tactic: 'pincer', maxMelee: 3, maxRanged: 2,
           caption: 'Eles marcham entre as colunas como ela marchava, anos atrás.',
@@ -3800,7 +3952,7 @@
           caption: 'Bombardas no altar. Vespas nos vitrais. Sussurros entre as colunas.',
           spawns: [Sp('cannon', 1100, -600, { awake: true }), Sp('cannon', 1100, 600, { awake: true }), Sp('drone', 700, -250, { drop: true }), Sp('drone', 700, 250, { drop: true }), Sp('drone', 900, -500, { drop: true }), Sp('drone', 900, 500, { drop: true }),
             Sp('rogue', 600, 0, { cloak: true }), Sp('rogue', 850, 600, { cloak: true })] },
-        { trigger: { after: 1, delay: 3 }, tactic: 'pincer', maxMelee: 3, maxRanged: 2, gates: [[1250, 0, 40, 1800]],
+        { trigger: { goal: 2, delay: 1.5 }, tactic: 'pincer', maxMelee: 3, maxRanged: 2, gates: [[1250, 0, 40, 1800]],
           caption: 'O Carrasco de Brasa guarda a descida. Usa a coroa de alguém que ela amava.',
           spawns: [Sp('brute', 1150, 0, { awake: true, mini: 'O Carrasco de Brasa' }), Sp('brute', 1100, -450, { awake: true }), Sp('shield', 1000, 450, { awake: true }), Sp('archer', 700, -600), Sp('archer', 700, 600), Sp('grenadier', 1100, 600, { awake: true })] },
       ],
@@ -3818,6 +3970,13 @@
       fonts: [{ x: -860, y: 700 }, { x: 860, y: -700 }],
       embers: [],
       altar: null, exit: null,
+      goals: [
+        { kind: 'flag', flag: 'phase2', text: 'Enfrente Vezmir, o Fundidor de Almas' },
+        { kind: 'destroy', prop: 'anchor', hp: 120, late: true, at: [[-650, -300], [650, 300], [0, -690]], text: 'Quebre as correntes da Fornalha-Mãe',
+          startLine: 'Correntes em brasa prendem Vezmir à Fornalha. Enquanto estiverem de pé, nenhum golpe o alcança.',
+          lines: ['Uma corrente se parte. Vezmir cambaleia.', 'A segunda corrente cai na lava.'], doneLine: 'Sem as correntes, o fogo não o protege mais.', onDone: 'boss' },
+        { kind: 'flag', flag: 'bossDead', text: 'Derrote Vezmir' },
+      ],
       encs: [
         { trigger: { start: 1 }, tactic: 'boss', maxMelee: 2, maxRanged: 1, maxDrone: 2, bossIntro: true,
           spawns: [Sp('boss', 0, -420, { awake: true })] },
@@ -3841,6 +4000,7 @@
   // cria o mapa e posiciona o esquadrão de cada encontro em emboscada
   function loadMap(map) {
     CAMPAIGN.map = map;
+    OBJ.list = []; OBJ.i = -1; OBJ.finished = false;
     setWorld(map);
     G.fonts = (map.fonts || []).map((f) => ({ x: f.x, y: f.y, ready: true, prog: 0 }));
     G.embers = (map.embers || []).map((b, i) => ({ x: b.x, y: b.y, id: map.id + ':' + i, taken: SAVE.embers[map.id + ':' + i] || false }));
@@ -3861,6 +4021,10 @@
       }
     }
     refreshActive();
+    loadGoals(map);
+    const types = new Set((map.encs || []).flatMap((d) => d.spawns.map((sp) => sp.type)));
+    for (const g of map.goals || []) if (g.spawn) types.add(g.spawn.type);
+    preloadVoices([...types]);
   }
   function placeLurker(e, sp) {
     e.state = 'lurk'; e.st = 0; e.stTotal = 0;
@@ -3896,6 +4060,7 @@
         else if (tr.zone && P.x > tr.zone[0] && P.x < tr.zone[0] + tr.zone[2] && P.y > tr.zone[1] && P.y < tr.zone[1] + tr.zone[3]) triggerEncounter(enc, 'zone');
         else if (tr.after !== undefined && C.encs[tr.after] && C.encs[tr.after].state === 'done') { enc.wait += dt; if (enc.wait >= (tr.delay || 0)) triggerEncounter(enc, 'after'); }
         else if (tr.story !== undefined && C.stories[tr.story] && C.stories[tr.story].done) { enc.wait += dt; if (enc.wait >= (tr.delay || 0)) triggerEncounter(enc, 'story'); }
+        else if (tr.goal !== undefined && OBJ.i >= tr.goal) { enc.wait += dt; if (enc.wait >= (tr.delay || 0)) triggerEncounter(enc, 'goal'); }
         // a isca corre para trás da linha quando o jogador se aproxima
         continue;
       }
@@ -3927,16 +4092,21 @@
       const z = st.zone;
       if (P.x > z[0] && P.x < z[0] + z[2] && P.y > z[1] && P.y < z[1] + z[3]) { st.done = true; startCine(st.lines, {}); }
     }
+    updateGoals(dt);
   }
   function nearestFree(x, y, r) {
     for (let rr = 20; rr < 400; rr += 20) for (let a = 0; a < TAU; a += 0.6) { const nx = x + Math.cos(a) * rr, ny = y + Math.sin(a) * rr; if (freeSpot(nx, ny, r)) return { x: nx, y: ny }; }
     return { x: 0, y: 0 };
   }
   function onEncounterDone(enc) {
-    const C = CAMPAIGN;
     setGates(enc, false);
-    const allDone = C.encs.every((e) => e.state === 'done');
-    if (!allDone) { caption('As raízes da Figueira voltam a brilhar.', 2.5); return; }
+    if (!chapterClear()) { caption('As raízes da Figueira voltam a brilhar.', 2.5); return; }
+    chapterCleared();
+  }
+  function chapterCleared() {
+    const C = CAMPAIGN;
+    if (OBJ.finished) return;
+    OBJ.finished = true;
     slowmo(1.0, 0.3);
     const ch = CHAPTERS[C.idx];
     if (!ch) return;
@@ -3952,6 +4122,198 @@
   }
 
   // =========================================================================
+  // Objetivos do capítulo: cada fase tem sua própria sequência, mostrada no rastreador do topo
+  // e marcada no mundo (feixe de luz + seta na borda da tela).
+  //   clear   { encs }                  vencer encontros
+  //   destroy { prop, at, hp, spawn }    quebrar peças (golpes, magias, bombas e barris acertam)
+  //   hold    { at, r, time, fx }        ficar no círculo; inimigo dentro do círculo trava o progresso
+  //   collect { item, at, lines }        recolher objetos
+  //   reach   { at, r }                  chegar a um lugar
+  //   flag    { flag }                   acontecimento da luta (fase do chefe, morte do chefe)
+  // =========================================================================
+  const OBJ = { list: [], i: -1, flags: {}, spawnT: 0, finished: false };
+  const PROP_R = { chain: 26, cage: 40, hive: 30, anchor: 34 };
+  const curGoal = () => OBJ.list[OBJ.i] || null;
+  function loadGoals(map) {
+    OBJ.i = -1; OBJ.flags = {}; OBJ.spawnT = 2; OBJ.finished = false;
+    OBJ.list = (map.goals || []).map((g, gi) => {
+      const at = !g.at ? [] : Array.isArray(g.at[0]) ? g.at : [g.at];
+      const pts = at.map(([x, y], k) => {
+        const f = freeSpot(x, y, 44) ? { x, y } : nearestFree(x, y, 44);
+        return { x: f.x, y: f.y, k, done: false, prog: 0, contested: false };
+      });
+      return Object.assign({}, g, { gi, done: false, n: 0, need: g.kind === 'destroy' || g.kind === 'hold' || g.kind === 'collect' ? pts.length : 1, pts });
+    });
+    // peças quebráveis ficam no mapa desde o começo (as tardias surgem quando o objetivo começa)
+    for (const g of OBJ.list) if (g.kind === 'destroy' && !g.late) for (const p of g.pts) spawnGoalProp(g, p);
+    if (OBJ.list.length) nextGoal(true);
+  }
+  function spawnGoalProp(g, p) {
+    const ob = { c: 1, x: p.x, y: p.y, r: PROP_R[g.prop] || 30, tall: true, goal: g.prop, gref: g, gp: p, ghp: g.hp, gmax: g.hp, hitT: 0 };
+    p.ob = ob;
+    addObstacle(ob);
+  }
+  function damageGoalProp(ob, dmg, heavy) {
+    if (ob.ghp <= 0) return;
+    const g = ob.gref;
+    if (g.guarded && G.enemies.some((e) => e.goalSpawn === g && !e.dead && len(e.x - ob.x, e.y - ob.y) < 170)) {
+      if (ob.hitT <= 0) addText(ob.x, ob.y - 70, 'PROTEGIDA — AFASTE AS VESPAS', '#ffcf8a', 13);
+      ob.hitT = 0.15; Sound.play('clang', ob.x, ob.y); return;
+    }
+    ob.ghp -= dmg * (heavy ? 1.4 : 1);
+    ob.hitT = 0.18;
+    burst(ob.x, ob.y, rand(0, TAU), 8, g.prop === 'hive' ? '#ffcf6a' : '#c9c3b5', 220, true);
+    fxq('sparks', ob.x, ob.y);
+    Sound.play(g.prop === 'cage' || g.prop === 'anchor' || g.prop === 'chain' ? 'clang' : 'hit', ob.x, ob.y);
+    if (ob.ghp <= 0) destroyGoalProp(ob);
+  }
+  function destroyGoalProp(ob) {
+    const g = ob.gref, p = ob.gp;
+    removeObstacle(ob);
+    p.done = true;
+    shake(0.5); vibrate(30); Sound.play('crack', ob.x, ob.y); Sound.play('boom', ob.x, ob.y);
+    burst(ob.x, ob.y, 0, 30, g.prop === 'hive' ? '#ffcf6a' : '#8a8a90', 340, true);
+    fxq('dust', ob.x, ob.y, 90); fxq('boom', ob.x, ob.y, 60);
+    const left = g.pts.filter((q) => !q.done).length;
+    addText(ob.x, ob.y - 70, left ? (g.need - left) + '/' + g.need : 'FEITO', '#ffe27a', 16);
+    if (g.lines && g.lines[p.k]) caption(g.lines[p.k], 3.5);
+    styleAdd(35, 'objetivo');
+  }
+  function nextGoal(first) {
+    OBJ.i++;
+    const g = curGoal();
+    if (!g) { finishGoals(); return; }
+    if (g.kind === 'destroy' && g.late) for (const p of g.pts) spawnGoalProp(g, p);
+    OBJ.spawnT = g.spawn ? Math.min(2, g.spawn.every) : 0;
+    if (!first) { G.banner = { text: 'NOVO OBJETIVO', sub: g.text, t: 3 }; Sound.play('uiok'); }
+    if (g.startLine) caption(g.startLine, 4);
+  }
+  function completeGoal(g) {
+    if (g.done) return;
+    g.done = true;
+    Sound.play('relic');
+    if (g.doneLine) caption(g.doneLine, 4);
+    // o sino calou: quem ele levantou volta ao chão
+    if (g.spawn && g.spawn.collapse) for (const e of G.enemies) if (e.goalSpawn === g && !e.dead) killEnemy(e, 0);
+    if (g.onDone === 'boss') { const b = G.enemies.find((e) => e.boss && !e.dead); if (b) { slowmo(1.2, 0.3); camFx('reveal', b, 1.4); } }
+    nextGoal(false);
+  }
+  function finishGoals() {
+    if (chapterClear()) chapterCleared();
+  }
+  // capítulo vencido: objetivos cumpridos e nenhum encontro em andamento
+  function chapterClear() {
+    const C = CAMPAIGN;
+    if (C.active.length) return false;
+    if (OBJ.list.length) return OBJ.i >= OBJ.list.length;
+    return C.encs.every((e) => e.state === 'done');
+  }
+  function goalSpawner(g, dt) {
+    const s = g.spawn;
+    OBJ.spawnT -= dt;
+    if (OBJ.spawnT > 0) return;
+    OBJ.spawnT = s.every;
+    if (G.enemies.filter((e) => !e.dead && e.goalSpawn === g).length >= s.max) return;
+    const standing = g.pts.filter((q) => !q.done);
+    const src = s.from === 'prop' && standing.length ? standing[Math.floor(Math.random() * standing.length)] : null;
+    let x = 0, y = 0, ok = false;
+    for (let k = 0; k < 40 && !ok; k++) {
+      const a = rand(0, TAU), rr = src ? rand(50, 90) : rand(240, 420);
+      x = (src ? src.x : P.x) + Math.cos(a) * rr; y = (src ? src.y : P.y) + Math.sin(a) * rr;
+      ok = Math.abs(x) < ARENA.w / 2 - 60 && Math.abs(y) < ARENA.h / 2 - 60 && freeSpot(x, y, 18) && !inLava(x, y, 18);
+    }
+    if (!ok) return;
+    const e = makeEnemy(s.type, x, y);
+    e.goalSpawn = g; e.face = Math.atan2(P.y - y, P.x - x);
+    if (e.fly) e.role = 'drop';
+    setState(e, 'spawn', e.fly ? 0.8 : 1.1);
+    G.enemies.push(e);
+    if (src) burst(src.x, src.y, 0, 10, '#ffcf6a', 200, true);
+  }
+  function holdFx(g, p) {
+    Sound.play('uiok');
+    if (g.fx === 'depot') { // a carga de pólvora vai pelos ares (longe o bastante de quem acendeu)
+      const bx = p.x + Math.cos(p.k * 2.1) * 20, by = p.y + Math.sin(p.k * 2.1) * 20;
+      explode(bx, by, 170, 70, { move: 'pólvora', env: true, poise: 160, launch: 520 });
+      fxq('boom', bx, by, 150); shake(0.8);
+    } else if (g.fx === 'valve') { // a comporta fecha: o rio de lava ligado a ela esfria
+      const L = CAMPAIGN.map.lava[g.lava[p.k]];
+      const h = L && HAZ.find((q) => q.x === L.x && q.y === L.y && !q.dead);
+      if (h) { h.t = 1.4; fxq('dust', h.x, h.y, 200); }
+      Sound.play('slam'); shake(0.4);
+    } else if (g.fx === 'brazier') {
+      fxq('boom', p.x, p.y, 120); Sound.play('supreme');
+      P.hp = Math.min(P.maxHp, P.hp + 35); addText(P.x, P.y - 40, '+35 HP', '#6ef08a', 15);
+      explode(p.x, p.y, 220, 40, { move: 'brasa', env: true, poise: 120, launch: 480 });
+    }
+    if (g.lines && g.lines[p.k]) caption(g.lines[p.k], 3.5);
+  }
+  function updateGoals(dt) {
+    const g = curGoal();
+    if (!g || G.state !== 'play' || G.mode !== 'campaign') return;
+    switch (g.kind) {
+      case 'clear':
+        if (g.encs.every((i) => CAMPAIGN.encs[i] && CAMPAIGN.encs[i].state === 'done')) completeGoal(g);
+        break;
+      case 'destroy':
+        g.n = g.pts.filter((q) => q.done).length;
+        if (g.n >= g.need) completeGoal(g);
+        else if (g.spawn) goalSpawner(g, dt);
+        break;
+      case 'hold':
+        for (const p of g.pts) {
+          if (p.done) continue;
+          const inside = len(P.x - p.x, P.y - p.y) < g.r;
+          p.contested = G.enemies.some((e) => !e.dead && e.state !== 'lurk' && e.state !== 'spawn' && !e.isStatic && len(e.x - p.x, e.y - p.y) < g.r + e.r);
+          if (inside && !p.contested && P.state !== 'dead') p.prog += dt / g.time;
+          else if (!inside) p.prog = Math.max(0, p.prog - dt * 0.05);
+          if (inside && p.contested && (G.time % 1.6) < dt) addText(p.x, p.y - 60, 'INIMIGO NO CÍRCULO', '#ff9a8a', 12);
+          if (p.prog >= 1) { p.done = true; p.prog = 1; holdFx(g, p); }
+        }
+        g.n = g.pts.filter((q) => q.done).length;
+        if (g.n >= g.need) completeGoal(g);
+        break;
+      case 'collect':
+        for (const p of g.pts) {
+          if (p.done || len(P.x - p.x, P.y - p.y) > 46) continue;
+          p.done = true;
+          Sound.play('relic'); burst(p.x, p.y, 0, 16, '#ffe27a', 220, true);
+          if (g.lines && g.lines[p.k]) caption(g.lines[p.k], 4.5);
+        }
+        g.n = g.pts.filter((q) => q.done).length;
+        if (g.n >= g.need) completeGoal(g);
+        break;
+      case 'reach':
+        if (g.pts[0] && len(P.x - g.pts[0].x, P.y - g.pts[0].y) < (g.r || 120)) completeGoal(g);
+        break;
+      case 'flag':
+        if (OBJ.flags[g.flag]) completeGoal(g);
+        break;
+    }
+  }
+  // Vezmir preso às correntes da Fornalha: não sofre dano enquanto elas estiverem de pé
+  const bossAnchored = () => { const g = curGoal(); return !!(g && g.kind === 'destroy' && g.prop === 'anchor' && !g.done); };
+  // alvo atual (para marcadores, rastreador e testes): pontos ainda por fazer
+  function goalTargets() {
+    const g = curGoal();
+    if (!g || G.mode !== 'campaign') return [];
+    if (g.kind === 'destroy' || g.kind === 'hold' || g.kind === 'collect' || g.kind === 'reach') return g.pts.filter((p) => !p.done).map((p) => ({ x: p.x, y: p.y, kind: g.kind, p, g }));
+    if (g.kind === 'clear' || g.kind === 'flag') {
+      const mini = G.enemies.find((e) => !e.dead && (e.mini || e.boss) && e.state !== 'lurk' && (!e.enc || g.kind === 'flag' || (g.encs || []).includes(e.enc.i)));
+      if (mini) return [{ x: mini.x, y: mini.y, kind: 'kill', e: mini, g }];
+    }
+    return [];
+  }
+  function goalText() {
+    const g = curGoal();
+    if (!g) return '';
+    const cnt = g.need > 1 ? '  ' + g.pts.filter((q) => q.done).length + '/' + g.need : '';
+    let extra = '';
+    if (g.kind === 'hold') { const p = g.pts.find((q) => !q.done && q.prog > 0); if (p) extra = '  ·  ' + Math.round(p.prog * 100) + '%' + (p.contested ? ' (inimigo no círculo)' : ''); }
+    return g.text + cnt + extra;
+  }
+
+  // =========================================================================
   // Legendas e cenas (sem falas: só texto na tela)
   // =========================================================================
   const CAPS = { list: [], cine: null, flags: {} };
@@ -3961,6 +4323,7 @@
     if (!ev) return;
     if (ev.once && CAPS.flags[key]) return;
     CAPS.flags[key] = true;
+    OBJ.flags[key === 'bossPhase2' ? 'phase2' : key] = true;
     if (key === 'bossDead') { G.bossDeadT = 2.4; return; }
     if (key === 'bossPhase2') { startCine(ev.lines, {}); return; }
     for (const l of ev.lines) caption(l, 3.5);
@@ -4897,7 +5260,7 @@
   const ASSET_BASE = 'assets/';
   // Página autocontida: modelos (JSON) e texturas (data URI) podem vir embutidos em window.__ASSETS
   const EMBED = window.__ASSETS || null;
-  const BUILD = 'build 11 · qualidade máxima';
+  const BUILD = 'build 12 · objetivos, vozes e movimento';
   const ANIM_FILE = 'h/anims_h.glb';
   // texturas fotográficas do cenário (m = metros cobertos por uma repetição) e rochas escaneadas
   const ENV_TEX = {
@@ -5528,15 +5891,54 @@
   }
   // Andar/trotar/correr conforme a velocidade. Captura só tem passos para a frente:
   // de lado o corpo gira para a direção do passo; de ré, o andar toca ao contrário.
+  // Velocidade no chão de cada ciclo (medida pelo passo dos pés, personagem de 1,8 m): a cadência
+  // acompanha a velocidade real, sem o pé "patinar". Troca de marcha com histerese.
+  const GAIT = { walk: 53, jog: 135, sprint: 175 };
   function locomotion(v, vx, vy, face, idle) {
     const sp = len(vx, vy), k = v.scale;
-    if (sp < 22) { loopAnim(v, idle, 1, 0.2); return; }
+    if (sp < 22) { v.gait = 0; loopAnim(v, idle, 1, 0.25); return; }
     const rel = angDiff(face, Math.atan2(vy, vx));
-    if (Math.abs(rel) > 2.3 && sp < 170 * k) { loopAnim(v, 'Walking_Backwards', clamp(sp / (60 * k), 0.6, 1.8), 0.18); return; }
+    if (Math.abs(rel) > 2.3 && sp < 170 * k) { v.gait = 1; loopAnim(v, 'Walking_Backwards', clamp(sp / (GAIT.walk * k), 0.5, 2), 0.22); return; }
     if (Math.abs(rel) >= 0.35) v.yawT = rel;
-    if (sp > 165 * k) loopAnim(v, 'Running_B', clamp(sp / (215 * k), 0.75, 1.5), 0.18);
-    else if (sp > 75 * k) loopAnim(v, 'Running_A', clamp(sp / (120 * k), 0.7, 1.5), 0.18);
-    else loopAnim(v, 'Walking_A', clamp(sp / (58 * k), 0.6, 1.6), 0.18);
+    const g = v.gait || 0, up = 1.12, dn = 0.88; // histerese: não fica trocando de passo no limite
+    let want = sp > (g >= 3 ? 150 * dn : 150 * up) * k ? 3 : sp > (g >= 2 ? 80 * dn : 80 * up) * k ? 2 : 1;
+    v.gait = want;
+    if (want === 3) loopAnim(v, 'Running_B', clamp(sp / (GAIT.sprint * k), 0.7, 1.45), 0.24);
+    else if (want === 2) loopAnim(v, 'Running_A', clamp(sp / (GAIT.jog * k), 0.65, 1.4), 0.24);
+    else loopAnim(v, 'Walking_A', clamp(sp / (GAIT.walk * k), 0.5, 1.8), 0.24);
+  }
+  // Camada procedural sobre a captura: cabeça, pescoço e tronco viram para o alvo;
+  // o corpo inclina ao arrancar, frear e fazer curva.
+  const _lq = new THREE.Quaternion(), _lq2 = new THREE.Quaternion(), _lax = new THREE.Vector3();
+  const LOOK_CHAIN = [['spine_02', 0.16], ['spine_03', 0.24], ['neck_01', 0.26], ['Head', 0.34]];
+  function modelQuat(b, model, out) {
+    out.identity();
+    for (let o = b; o && o !== model; o = o.parent) out.premultiply(o.quaternion);
+    return out;
+  }
+  function lookLayer(v, yawSim, weight, dt) {
+    if (!v.bones || !v.bones.Head) return;
+    const want = clamp(-yawSim, -1.1, 1.1) * weight;
+    v.look = (v.look || 0) + (want - (v.look || 0)) * Math.min(1, dt * 7);
+    if (Math.abs(v.look) < 0.01) return;
+    for (const [name, w] of LOOK_CHAIN) {
+      const b = v.bones[name];
+      if (!b || !b.parent) continue;
+      modelQuat(b.parent, v.model, _lq).invert();
+      _lax.set(0, 1, 0).applyQuaternion(_lq);
+      b.quaternion.premultiply(_lq2.setFromAxisAngle(_lax, v.look * w));
+    }
+  }
+  function leanLayer(v, vx, vy, face, dt) {
+    const ax = (vx - (v.lvx || 0)) / Math.max(dt, 1e-3), ay = (vy - (v.lvy || 0)) / Math.max(dt, 1e-3);
+    v.lvx = vx; v.lvy = vy;
+    const c = Math.cos(face), s = Math.sin(face);
+    const fwd = ax * c + ay * s, side = -ax * s + ay * c;
+    const tp = clamp(fwd * 0.00012, -0.12, 0.12), tr = clamp(-side * 0.00012, -0.14, 0.14);
+    const k = Math.min(1, dt * 8);
+    v.leanP = (v.leanP || 0) + (tp - (v.leanP || 0)) * k;
+    v.leanR = (v.leanR || 0) + (tr - (v.leanR || 0)) * k;
+    v.tilt.rotation.x += v.leanP; v.tilt.rotation.z += v.leanR;
   }
   // Giro visual do corpo (passo lateral, esquiva, golpe giratório) somado ao rosto da simulação
   function bodyYaw(v, dt) {
@@ -5634,9 +6036,18 @@
       default: locomotion(v, P.vx, P.vy, P.face, Wd.idle);
     }
     v.mixer.update(dt);
-    v.root.rotation.y = Math.PI / 2 - faceOf(P) - bodyYaw(v, dt);
+    const bodyR = bodyYaw(v, dt);
+    v.root.rotation.y = Math.PI / 2 - faceOf(P) - bodyR;
     v.root.position.y = P.z * U;
+    {
+      let tg = P.lock && !P.lock.dead ? P.lock : null;
+      if (!tg) { let bd = 420; for (const e of G.enemies) { if (e.dead || e.state === 'lurk' || e.state === 'spawn') continue; const d = len(e.x - P.x, e.y - P.y); if (d < bd && Math.abs(angDiff(P.face, Math.atan2(e.y - P.y, e.x - P.x))) < 1.9) { bd = d; tg = e; } } }
+      const busy = P.state === 'dash' || P.state === 'hurt' || P.state === 'dead' || P.state === 'special' || P.state === 'execute';
+      const yaw = tg ? angDiff(faceOf(P) + bodyR, Math.atan2(tg.y - P.y, tg.x - P.x)) : 0;
+      lookLayer(v, yaw, busy ? 0 : P.state === 'attack' ? 0.35 : 1, dt);
+    }
     applyFlinch(v, P, P.face);
+    if (P.state !== 'dash') leanLayer(v, P.vx, P.vy, P.face, dt);
     tint(v, P.state === 'stance' ? 'parry' : P.parryT > 0 ? 'parry' : P.state === 'charge' && P.chargeLv > 1 ? 'charge' + P.chargeLv
       : P.state === 'special' && P.spec && P.spec.def.supreme ? 'supreme' : P.furyT > 0 ? 'fury'
       : (P.iframe > 0 && P.state === 'hurt' && Math.floor(G.time * 20) % 2 === 0 ? 'flash' : 'none'));
@@ -5771,13 +6182,13 @@
       v.prevState = v.state; v.state = e.state;
       if (ALT_ON_ENTER.has(e.state)) v.alt = !v.alt;
       if (e.state === 'dodge') v.dodgeClip = dodgeClip(e.face, e.vx, e.vy);
-      if (e.state === 'stagger') v.hitClip = Math.random() < 0.5 ? 'Hit_A' : 'Hit_B';
+      if (e.state === 'stagger') v.hitClip = e.bigHit ? 'Hit_Knockback' : Math.random() < 0.5 ? 'Hit_A' : 'Hit_B';
       if (e.state === 'windup' && e.type === 'grunt' && e.combo > 0) v.alt = !v.alt;
     }
     const p = prog(e), def = v.def;
     let tumble = 0;
     if (P.state === 'dead' && e.state === 'move') loopAnim(v, def.undead ? 'Taunt' : 'Cheer', 1, 0.3);
-    else if (e.state === 'lurk') loopAnim(v, def.idle, 1, 0.2);
+    else if (e.state === 'lurk') loopAnim(v, e.awake || e.buried ? def.idle : def.undead ? 'Zombie_Idle_Loop' : 'Crouch_Idle_Loop', 1, 0.2);
     else if (e.role === 'bait' && e.state === 'move' && len(e.vx, e.vy) < 30) loopAnim(v, v.clips.Taunt ? 'Taunt' : 'Cheer', 1, 0.3);
     else {
       switch (e.state) {
@@ -5805,7 +6216,12 @@
       }
     }
     v.mixer.update(e.frozenT > 0 ? 0 : dt);
-    v.root.rotation.y = Math.PI / 2 - faceOf(e) - bodyYaw(v, e.frozenT > 0 ? 0 : dt);
+    const bodyR = bodyYaw(v, e.frozenT > 0 ? 0 : dt);
+    v.root.rotation.y = Math.PI / 2 - faceOf(e) - bodyR;
+    if (!PASSIVE.has(e.state) && e.state !== 'spawn' && e.state !== 'dodge' && e.frozenT <= 0) {
+      const watching = e.state === 'lurk' ? (e.buried ? 0 : 0.6) : ATTACKING.has(e.state) ? 0.4 : 1;
+      lookLayer(v, angDiff(faceOf(e) + bodyR, Math.atan2(P.y - e.y, P.x - e.x)), watching, dt);
+    }
     // enterrado espera sob o chão; o esqueleto sobe com a própria animação de despertar
     v.root.position.y = (e.state === 'lurk' && e.buried ? -v.height * 1.2 : e.state === 'spawn' && !def.undead ? -v.height * 1.05 * (1 - easeOut(p)) : 0) + (e.z || 0) * U;
     if (v.gun && !v.gunInHand) {
@@ -5816,6 +6232,7 @@
     if (v.bossAura) { v.bossAura.material.opacity = (e.phase === 2 ? 0.55 : 0.3) + Math.sin(realT * 5) * 0.08; v.bossAura.scale.setScalar(e.phase === 2 ? 4.2 : 3.2); }
     if (v.aura) v.aura.rotation.y += dt * 1.5;
     applyFlinch(v, e, e.face);
+    if (!PASSIVE.has(e.state) && !e.isStatic) leanLayer(v, e.vx, e.vy, e.face, dt);
     if (tumble) v.tilt.rotation.x += tumble;
     tint(v, e.hitFlash > 0 ? 'flash' : e.frozenT > 0 ? 'frozen' : e.captured > 0 ? 'parry' : e.berserkT > 0 ? 'rage' : e.chillT > 0 ? 'chill' : 'none');
   }
@@ -6837,7 +7254,7 @@
   }
 
   // ---------- Peças vivas: barris de pólvora, colunas rachadas, entulho, muralhas conjuradas, portões, lâminas ----------
-  const isDyn = (ob) => !!(ob.exp || ob.crack || ob.temp !== undefined || ob.gate || ob.rubble);
+  const isDyn = (ob) => !!(ob.exp || ob.crack || ob.temp !== undefined || ob.gate || ob.rubble || ob.goal);
   const propViews = new Map(), bladeViews = new Map();
   function clearProps() {
     for (const [, pv] of propViews) { scene.remove(pv.g); disposeProp(pv); }
@@ -6845,7 +7262,52 @@
     for (const [, bv] of bladeViews) { scene.remove(bv.g); disposeProp(bv); }
     bladeViews.clear();
   }
-  function disposeProp(pv) { pv.g.traverse((o) => { if (o.userData.ownMat && o.material) o.material.dispose(); if (o.userData.ownGeo && o.geometry) o.geometry.dispose(); }); }
+  function disposeProp(pv) {
+    if (pv.prisoner) { pv.g.remove(pv.prisoner.root); disposeView(pv.prisoner); pv.prisoner = null; }
+    pv.g.traverse((o) => { if (o.userData.ownMat && o.material) o.material.dispose(); if (o.userData.ownGeo && o.geometry) o.geometry.dispose(); });
+  }
+  // Modelos das peças de objetivo (com as texturas do cenário quando carregadas)
+  function goalMat(k, color, o) {
+    const src = MODELS.ready && MODELS.gltf['dungeon.glb'] && MODELS.gltf['dungeon.glb'].mats && MODELS.gltf['dungeon.glb'].mats[k];
+    const m = src ? src.clone() : new THREE.MeshStandardMaterial({ color: color || '#777', roughness: 0.8 });
+    if (o) Object.assign(m, o);
+    m.userData.ownMat = true;
+    return m;
+  }
+  function buildGoalProp(kind, R) {
+    const g = new THREE.Group();
+    const add = (geom, mat, x, y, z) => { const m = new THREE.Mesh(geom, mat); m.position.set(x || 0, y || 0, z || 0); m.castShadow = true; m.receiveShadow = true; m.userData.ownGeo = true; m.userData.ownMat = true; g.add(m); return m; };
+    const stone = goalMat('block', '#8a8078'), iron = goalMat('iron', '#3a3634'), wood = goalMat('wood', '#7a5a40');
+    if (kind === 'chain' || kind === 'anchor') { // bloco de pedra com argola e corrente subindo até o escuro
+      const big = kind === 'anchor';
+      add(new THREE.BoxGeometry(R * 1.7, big ? 1.3 : 0.9, R * 1.7), stone, 0, big ? 0.65 : 0.45, 0);
+      add(new THREE.TorusGeometry(0.28, 0.07, 8, 18), iron, 0, big ? 1.4 : 1.0, 0).rotation.y = 0.4;
+      const chain = new THREE.Group(); chain.position.y = big ? 1.4 : 1.0; g.add(chain); g.userData.chain = chain;
+      const ember = kind === 'anchor' ? new THREE.MeshStandardMaterial({ color: '#3a2a22', emissive: '#ff5a1a', emissiveIntensity: 0.9, metalness: 0.7, roughness: 0.4 }) : iron;
+      ember.userData.ownMat = true;
+      for (let i = 0; i < 16; i++) {
+        const l = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.035, 6, 12), ember);
+        l.position.y = 0.2 + i * 0.22; l.rotation.y = i % 2 ? Math.PI / 2 : 0; l.castShadow = true; l.userData.ownGeo = true;
+        chain.add(l);
+      }
+    } else if (kind === 'cage') { // jaula de barras de ferro com piso de tábuas
+      const s = R * 1.9, h = 2.4;
+      add(new THREE.BoxGeometry(s + 0.2, 0.18, s + 0.2), wood, 0, 0.09, 0);
+      add(new THREE.BoxGeometry(s + 0.2, 0.14, s + 0.2), iron, 0, h, 0);
+      for (let i = 0; i < 4; i++) for (let j = 0; j < 7; j++) {
+        const t = -s / 2 + j * s / 6, side = i % 2 ? 1 : -1, alongX = i < 2;
+        add(new THREE.CylinderGeometry(0.035, 0.035, h, 6), iron, alongX ? t : side * s / 2, h / 2, alongX ? side * s / 2 : t);
+      }
+      add(new THREE.BoxGeometry(0.3, 0.4, 0.12), iron, 0, 1.2, s / 2 + 0.05); // cadeado
+    } else if (kind === 'hive') { // colmeia de latão presa num poste, com bocas acesas
+      add(new THREE.CylinderGeometry(0.1, 0.12, 2.2, 8), iron, 0, 1.1, 0);
+      const brass = new THREE.MeshStandardMaterial({ color: '#b88a3a', metalness: 0.85, roughness: 0.38 }); brass.userData.ownMat = true;
+      const glow = new THREE.MeshStandardMaterial({ color: '#2a1a08', emissive: '#ffb03c', emissiveIntensity: 1.6 }); glow.userData.ownMat = true;
+      for (let i = 0; i < 4; i++) add(new THREE.CylinderGeometry(R * (0.6 + 0.25 * Math.sin(i / 3 * Math.PI)), R * (0.6 + 0.25 * Math.sin((i + 1) / 3 * Math.PI)), 0.32, 6), brass, 0, 1.9 + i * 0.32, 0);
+      for (let i = 0; i < 6; i++) { const a = i / 6 * TAU; add(new THREE.CircleGeometry(0.1, 8), glow, Math.cos(a) * R * 0.78, 2.3, Math.sin(a) * R * 0.78).rotation.y = -a + Math.PI / 2; }
+    }
+    return g;
+  }
   // cópia de uma peça do cenário, com materiais próprios (para tingir/brilhar)
   function piece(name, tintC, emis) {
     const g = MODELS.ready && MODELS.gltf['dungeon.glb'];
@@ -6907,6 +7369,14 @@
         inner.add(b);
       }
       inner.position.y = 4; pv.drop = 0;
+    } else if (ob.goal) {
+      pv.kind = 'goal';
+      const body = buildGoalProp(ob.goal, ob.r * U);
+      g.add(body); pv.body = body;
+      pv.glow = glowSprite(ob.goal === 'hive' ? '#ffcf6a' : '#ff7a2a', ob.goal === 'cage' ? 2.2 : 1.6, 0.35); pv.glow.position.y = ob.goal === 'hive' ? 2.6 : 1.4; g.add(pv.glow);
+      if (ob.goal === 'cage' && P.hero !== 'orsa' && MODELS.ready) { // Orsa presa (se não for ela quem está jogando)
+        const v = buildView('hero_orsa'); v.root.scale.multiplyScalar(0.92); v.root.rotation.y = Math.PI / 2; g.add(v.root); pv.prisoner = v;
+      }
     } else if (ob.temp !== undefined) {
       pv.kind = 'wall';
       const along = ob.w >= ob.h, L = (along ? ob.w : ob.h) * U, T = (along ? ob.h : ob.w) * U;
@@ -6955,6 +7425,14 @@
       } else if (pv.kind === 'gate') {
         pv.drop = Math.min(1, pv.drop + 0.06);
         pv.inner.position.y = 4 * (1 - easeOut(pv.drop));
+      } else if (pv.kind === 'goal') {
+        ob.hitT -= 1 / 60;
+        const k = Math.max(0, ob.hitT) / 0.18;
+        pv.body.position.set(Math.sin(realT * 90) * 0.06 * k, 0, Math.cos(realT * 77) * 0.06 * k);
+        pv.glow.material.opacity = 0.25 + 0.12 * Math.sin(realT * 3 + ob.x) + k * 0.5;
+        if (ob.goal === 'hive') pv.body.rotation.y = realT * 0.4;
+        if (ob.goal === 'chain' || ob.goal === 'anchor') { const c = pv.body.userData.chain; if (c) c.rotation.y = Math.sin(realT * 1.3 + ob.x) * 0.15; }
+        if (pv.prisoner) { const v = pv.prisoner; loopAnim(v, 'Idle_Loop', 1, 0.2); v.mixer.update(1 / 60); }
       } else if (pv.kind === 'wall') {
         pv.rise = Math.min(1, pv.rise + 0.08);
         const sink = ob.temp < 0.5 ? ob.temp / 0.5 : 1;
@@ -7070,6 +7548,81 @@
     exit.visible = false;
     ENV.root.add(exit);
     ENV.exit = { g: exit, swirl };
+  }
+  // ---------- Objetivos no mundo: círculos, objetos a recolher e feixes de luz ----------
+  const GV = { list: null, zones: [], items: [], beams: [] };
+  function beamMesh(color) {
+    const m = new THREE.Mesh(geo('goalBeam', () => new THREE.CylinderGeometry(0.28, 0.55, 14, 16, 1, true).translate(0, 7, 0)),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    m.userData.ownMat = true;
+    return m;
+  }
+  function buildGoalVisuals() {
+    GV.list = OBJ.list; GV.zones = []; GV.items = []; GV.beams = [];
+    if (!ENV) return;
+    for (const g of OBJ.list) {
+      for (const p of g.pts) {
+        if (g.kind === 'hold') {
+          const grp = new THREE.Group(); grp.position.set(p.x * U, 0.04, p.y * U);
+          const R = g.r * U;
+          const ring = new THREE.Mesh(new THREE.RingGeometry(R - 0.12, R, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ffcf6a', transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
+          const fill = new THREE.Mesh(new THREE.CircleGeometry(R, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ffb03c', transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false }));
+          fill.position.y = 0.01;
+          for (const m of [ring, fill]) { m.userData.ownMat = true; m.userData.ownGeo = true; grp.add(m); }
+          // o que está no centro: depósito (barris), comporta (roda de ferro), braseiro (bacia)
+          const iron = goalMat('iron', '#3a3634'), wood = goalMat('wood', '#7a5a40'), stone = goalMat('block', '#8a8078');
+          const piece = (geom, mat, x, y, z) => { const m = new THREE.Mesh(geom, mat); m.position.set(x, y, z); m.castShadow = true; m.userData.ownGeo = true; m.userData.ownMat = true; grp.add(m); return m; };
+          if (g.fx === 'depot') { for (let i = 0; i < 3; i++) piece(new THREE.CylinderGeometry(0.32, 0.36, 0.8, 12), wood, Math.cos(i * 2.1) * 0.45, 0.4, Math.sin(i * 2.1) * 0.45); piece(new THREE.BoxGeometry(0.9, 0.5, 0.6), wood, 0, 0.25, -0.9); }
+          else if (g.fx === 'valve') { piece(new THREE.BoxGeometry(0.5, 1.1, 0.5), stone, 0, 0.55, 0); const w = piece(new THREE.TorusGeometry(0.42, 0.06, 8, 20), iron, 0, 1.25, 0); w.rotation.x = Math.PI / 2; p.wheel = w; }
+          else if (g.fx === 'brazier') { piece(new THREE.CylinderGeometry(0.25, 0.4, 1.0, 10), stone, 0, 0.5, 0); piece(new THREE.CylinderGeometry(0.8, 0.45, 0.35, 16), iron, 0, 1.15, 0); const f = glowSprite('#ff7a2a', 3.2, 0); f.position.y = 1.9; grp.add(f); p.flame = f; }
+          ENV.root.add(grp);
+          GV.zones.push({ g, p, grp, ring, fill });
+        } else if (g.kind === 'collect') {
+          const grp = new THREE.Group(); grp.position.set(p.x * U, 0, p.y * U);
+          const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.38, 0.9, 10), goalMat('block', '#8a8078')); stand.position.y = 0.45; stand.castShadow = true; stand.userData.ownMat = true; stand.userData.ownGeo = true; grp.add(stand);
+          let obj;
+          if (g.item === 'armor' && MODELS.ready && MODELS.gltf['h/w_shield_heater.glb']) {
+            obj = MODELS.gltf['h/w_shield_heater.glb'].scene.clone(true);
+            const bb = new THREE.Box3().setFromObject(obj), sz = bb.getSize(new THREE.Vector3());
+            obj.scale.setScalar(0.75 / Math.max(sz.x, sz.y, sz.z)); obj.rotation.x = -0.35;
+          } else {
+            obj = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 0.36), new THREE.MeshStandardMaterial({ color: '#c07a48', metalness: 0.9, roughness: 0.35, emissive: '#3a1a08', emissiveIntensity: 0.4 }));
+            obj.userData.ownMat = true; obj.userData.ownGeo = true; obj.rotation.x = -0.5;
+          }
+          obj.position.y = 1.2; grp.add(obj);
+          const s = glowSprite('#ffe27a', 1.2, 0.6); s.position.y = 1.2; grp.add(s);
+          ENV.root.add(grp);
+          GV.items.push({ g, p, grp, obj });
+        }
+      }
+    }
+  }
+  function updateGoalVisuals() {
+    if (!ENV) return;
+    if (GV.list !== OBJ.list || GV.env !== ENV) { GV.env = ENV; buildGoalVisuals(); }
+    const cur = curGoal();
+    for (const z of GV.zones) {
+      const active = z.g === cur, p = z.p;
+      z.grp.visible = active || p.done;
+      z.ring.material.color.set(p.done ? '#6ef08a' : p.contested ? '#ff5a4a' : '#ffcf6a');
+      z.ring.material.opacity = p.done ? 0.25 : 0.45 + 0.25 * Math.sin(realT * 4);
+      z.fill.material.opacity = p.done ? 0 : 0.06 + p.prog * 0.3;
+      if (p.wheel) p.wheel.rotation.z = p.prog * 6;
+      if (p.flame) { p.flame.material.opacity = p.done ? 0.9 : p.prog * 0.7; p.flame.scale.setScalar(2 + p.prog * 2 + Math.sin(realT * 9) * 0.2); }
+    }
+    for (const it of GV.items) {
+      it.grp.visible = !it.p.done && (it.g === cur || it.g.gi > OBJ.i);
+      it.obj.rotation.y = realT * 1.2;
+      it.obj.position.y = 1.2 + Math.sin(realT * 2 + it.p.k) * 0.06;
+    }
+    // feixes de luz sobre o que falta fazer
+    const tg = goalTargets().filter((t) => t.kind !== 'kill');
+    while (GV.beams.length < tg.length) { const b = beamMesh('#ffcf6a'); ENV.root.add(b); GV.beams.push(b); }
+    GV.beams.forEach((b, i) => {
+      const t = tg[i];
+      b.visible = !!t;
+      if (t) { b.position.set(t.x * U, 0, t.y * U); b.material.opacity = 0.1 + 0.06 * Math.sin(realT * 3 + i); }
+    });
   }
   function updateDecor() {
     if (!ENV || !ENV.altar) return;
@@ -7227,7 +7780,7 @@
 
   // ---------- Legendas e cenas no DOM ----------
   const capEl = document.getElementById('caption'), cardEl = document.getElementById('chapterCard'), objEl = document.getElementById('objective');
-  let lastCap = '', lastObj = '';
+  let lastCap = '', lastObj = '', lastObjGoal = -2;
   function updateCaptionDOM() {
     const c = CAPS.cine;
     let text = '';
@@ -7240,13 +7793,21 @@
       if (G.mode === 'trial') obj = 'Provação · onda ' + G.wave;
       else if (CAMPAIGN.exit && CAMPAIGN.exit.open) obj = 'Siga para a saída';
       else if (CAMPAIGN.altar && !CAMPAIGN.altar.taken) obj = 'Vá até o altar';
+      else if (curGoal()) obj = goalText();
       else {
         const act = CAMPAIGN.active;
         if (act.length) { let n = 0; for (const e of G.enemies) if (!e.dead && act.includes(e.enc)) n++; obj = 'Esquadrão: ' + n + (n === 1 ? ' inimigo' : ' inimigos'); }
         else obj = 'Avance';
       }
     }
-    if (obj !== lastObj) { lastObj = obj; objEl.textContent = obj; objEl.classList.toggle('on', !!obj); }
+    if (obj !== lastObj) {
+      const isNew = curGoal() && lastObjGoal !== OBJ.i;
+      lastObj = obj; lastObjGoal = OBJ.i;
+      objEl.innerHTML = obj ? (G.mode === 'campaign' ? '<small>OBJETIVO</small>' : '') + '<span></span>' : '';
+      if (obj) objEl.querySelector('span').textContent = obj;
+      objEl.classList.toggle('on', !!obj);
+      if (isNew) { objEl.classList.remove('flash'); void objEl.offsetWidth; objEl.classList.add('flash'); }
+    }
   }
 
   // ---------- Dicas de controle (fora da história; aparecem uma vez) ----------
@@ -7319,6 +7880,52 @@
       ctx.restore();
     }
     ctx.globalAlpha = 1;
+  }
+  // Objetivo: seta dourada na borda (com distância) quando fora da tela; anel de progresso; vida das peças
+  function drawGoalMarkers() {
+    if (G.mode !== 'campaign' || G.state !== 'play') return;
+    let targets = goalTargets();
+    if (!targets.length) {
+      const al = CAMPAIGN.altar, ex = CAMPAIGN.exit;
+      if (ex && ex.open) targets = [{ x: ex.x, y: ex.y, kind: 'exit' }];
+      else if (al && !al.taken) targets = [{ x: al.x, y: al.y, kind: 'altar' }];
+    }
+    let nearest = null, nd = Infinity;
+    for (const t of targets) { const d = len(t.x - P.x, t.y - P.y); if (d < nd) { nd = d; nearest = t; } }
+    for (const t of targets) {
+      const h = t.kind === 'kill' ? 2.4 : t.kind === 'hold' ? 0.3 : 2.2;
+      const [sx, sy, ok] = project(t.x * U, h, t.y * U);
+      const on = ok && sx > 30 && sx < W - 30 && sy > 40 && sy < H - 30;
+      if (t.kind === 'hold' && on && t.p.prog > 0) {
+        ctx.lineWidth = 5; ctx.lineCap = 'round';
+        ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.arc(sx, sy - 40, 22, 0, TAU); ctx.stroke();
+        ctx.strokeStyle = t.p.contested ? '#ff6a5a' : '#ffcf6a'; ctx.beginPath(); ctx.arc(sx, sy - 40, 22, -Math.PI / 2, -Math.PI / 2 + TAU * t.p.prog); ctx.stroke();
+        ctx.lineCap = 'butt';
+      }
+      if (t.kind === 'destroy' && on && t.p.ob && t.p.ob.ghp < t.p.ob.gmax) {
+        const w = 70; bar(sx - w / 2, sy - 18, w, 6, t.p.ob.ghp / t.p.ob.gmax, '#ffb03c');
+      }
+      if (on) {
+        if (t.kind !== 'kill') { // losango sobre o alvo
+          const bob = Math.sin(realT * 4) * 3;
+          ctx.fillStyle = '#ffcf6a'; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(sx, sy - 34 + bob); ctx.lineTo(sx + 7, sy - 25 + bob); ctx.lineTo(sx, sy - 16 + bob); ctx.lineTo(sx - 7, sy - 25 + bob); ctx.closePath(); ctx.stroke(); ctx.fill();
+        }
+        continue;
+      }
+      if (t !== nearest) continue; // só a mais próxima vira seta na borda
+      const rel = angDiff(CAMERA.yaw, Math.atan2(t.y - P.y, t.x - P.x));
+      const ex = W / 2 + Math.sin(rel) * (W / 2 - 60), ey = H / 2 - Math.cos(rel) * (H / 2 - 60);
+      ctx.save(); ctx.translate(ex, ey);
+      ctx.save(); ctx.rotate(rel);
+      ctx.fillStyle = '#ffcf6a'; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, -16); ctx.lineTo(11, 6); ctx.lineTo(0, 1); ctx.lineTo(-11, 6); ctx.closePath(); ctx.stroke(); ctx.fill();
+      ctx.restore();
+      ctx.font = '800 11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      const txt = Math.round(nd * U) + ' m';
+      ctx.strokeText(txt, 0, 22); ctx.fillStyle = '#ffe9b0'; ctx.fillText(txt, 0, 22);
+      ctx.restore();
+    }
   }
   function drawLockAndCharge() {
     if (P.lock && !P.lock.dead) {
@@ -7403,6 +8010,7 @@
 
     syncLava();
     updateDecor();
+    if (G.mode === 'campaign') updateGoalVisuals();
     syncProps();
     updateFxSystems(rdt, tx || lerp(P.px, P.x, alpha) * U, tz || lerp(P.py, P.y, alpha) * U);
     if (gradePass) {
@@ -7551,7 +8159,7 @@
 
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    if (G.state === 'play' || G.state === 'paused' || G.state === 'over' || G.state === 'choice') { drawLabels(); drawLockAndCharge(); drawThreatArrows(); drawFontRing(); drawHUD(); }
+    if (G.state === 'play' || G.state === 'paused' || G.state === 'over' || G.state === 'choice') { drawLabels(); drawLockAndCharge(); drawThreatArrows(); drawFontRing(); drawGoalMarkers(); drawHUD(); }
   }
 
   // ---------- Camada 2D por cima do 3D: números, barras de vida, HUD ----------
@@ -7873,8 +8481,10 @@
     Sound.init(); Sound.resume();
     resetBattle('trial');
     CAMPAIGN.idx = -1;
+    OBJ.list = []; OBJ.i = -1;
     resetPlayer([], 0, TRIAL_MAP.start);
     enterMap(TRIAL_MAP);
+    preloadVoices(Object.keys(TYPES));
     show(null);
     document.body.classList.add('playing');
     lockPointer();
@@ -8016,6 +8626,7 @@
     resetBattle('campaign'); G.state = 'menu';
     resetPlayer([], 0, TRIAL_MAP.start);
     enterMap(TRIAL_MAP);
+    preloadVoices(Object.keys(TYPES));
     buildMenuLineup();
     refreshMenu();
     show('menu');
@@ -8237,7 +8848,7 @@
 
   // Gancho para testes automatizados (index.html?debug)
   if (/[?&]debug\b/.test(location.search)) window.__LR = {
-    G, P, CAMPAIGN, CHAPTERS, CAPS, SAVE: () => SAVE, startChapter, startTrial, makeEnemy, step, STEP, cineAdvance, triggerEncounter, chooseRelic, openRelicChoice,
+    G, P, CAMPAIGN, CHAPTERS, CAPS, SAVE: () => SAVE, OBJ, goalTargets, curGoal, startChapter, startTrial, makeEnemy, step, STEP, cineAdvance, triggerEncounter, chooseRelic, openRelicChoice,
     zoom: (d) => { CAMERA.dist = d; }, CAMERA, PERF: () => PERF, toggleLock, OBST: () => OBST, HAZ: () => HAZ, COVER: () => COVER, freeSpot, hasLOS, findPath, inObstacle, inLava, TYPES,
     HEROES, WEAPONS, SPECIALS, READ, STYLE, CAMFX, resetPlayer, tryAction, startSpecial, damageEnemy, openFigueira, heroOpen, views: () => views, playerView: () => playerView,
     setHero: (h, w) => { SAVE.hero = h; if (w) SAVE.weaponOf[h] = w; },

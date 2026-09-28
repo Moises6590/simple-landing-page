@@ -170,3 +170,20 @@ node standalone.mjs desktop && cd desktop-lite && node build.mjs && npx @neutral
 - **Android ajustado ao celular**: o empacotador reduz as texturas para 1K e os personagens para menos polígonos só no APK, porque o celular não tem memória de vídeo para tudo em 2K.
 - **Downloads pelo GitHub Releases**: o workflow `pacotes.yml` compila o APK e o pacote do Windows nos servidores do GitHub e publica na Release `build-N`. Links fixos para a versão mais recente estão em [`releases/LEIA-ME.md`](releases/LEIA-ME.md). O APK usa uma assinatura fixa, então cada versão instala por cima da anterior.
 
+### Build 12: objetivos por capítulo, vozes gravadas e movimento mais natural
+
+- **Objetivos claros em cada capítulo**, mostrados num rastreador no topo (com progresso) e marcados no mundo por um feixe de luz, um losango sobre o alvo e uma seta dourada com a distância quando o alvo está fora da tela:
+  - **I · Fossas de Treino:** vencer os guardas, **quebrar as três correntes do Sino dos Mortos** (enquanto o sino toca, mortos continuam levantando; quando cala, eles caem) e derrotar o Sargento Ossívio.
+  - **II · Muralha dos Arcabuzes:** vencer a emboscada, **sabotar três depósitos de pólvora** (ficar no círculo sem inimigos dentro; cada depósito explode) e **arrombar a jaula** onde Orsa está presa.
+  - **III · Fundição Viva:** **fechar três comportas de ferro**, e cada uma esfria um rio de lava e abre caminho. Depois, derrotar o Fornalheiro Gorvan.
+  - **IV · Ninho de Latão:** **destruir as colmeias** que soltam vespas, **recolher três registros de cobre** (que contam o plano de Vezmir), investigar o altar e derrotar a Irmã Engrenagem.
+  - **V · Salão dos Juramentos Partidos:** **recuperar as armaduras de Brand, Iolanda e Garrão**, **reacender o Braseiro do Juramento** resistindo no círculo e derrotar o Carrasco de Brasa.
+  - **VI · Coração da Forja:** na segunda fase, Vezmir fica **preso a três correntes em brasa** e não sofre dano até elas serem quebradas.
+- **Vozes gravadas por pessoas** para cada herói e cada tipo de inimigo: esforço no golpe, grito no golpe forte e nos especiais, dor, morte, alerta ao descobrir o jogador, risadas das Sussurros e cânticos do Capelão e de Vezmir. São cerca de 300 gravações de 14 autores (CC0, CC BY e CC BY-SA). Nenhuma fala com palavras: todo corte passou por reconhecimento de fala e os que tinham palavras foram descartados. Carregam por capítulo, só as vozes que o mapa usa.
+- **Movimento mais natural por cima da captura:**
+  - a cadência dos passos acompanha a velocidade real (andar, trotar e correr foram medidos pelo passo dos pés), sem o pé patinar, com troca de marcha suave;
+  - cabeça, pescoço e tronco viram para o alvo (o jogador para o inimigo, os inimigos para o jogador);
+  - o corpo inclina ao arrancar, frear e fazer curva;
+  - quem está de emboscada fica agachado, e golpe pesado joga o inimigo para trás com a reação de impacto.
+- A segunda fase de Vezmir sempre acontece, mesmo com golpes muito fortes.
+
