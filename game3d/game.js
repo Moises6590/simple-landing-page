@@ -4897,8 +4897,20 @@
   const ASSET_BASE = 'assets/';
   // Página autocontida: modelos (JSON) e texturas (data URI) podem vir embutidos em window.__ASSETS
   const EMBED = window.__ASSETS || null;
-  const BUILD = 'build 9 · personagens realistas';
+  const BUILD = 'build 10 · cenário realista';
   const ANIM_FILE = 'h/anims_h.glb';
+  // texturas fotográficas do cenário (m = metros cobertos por uma repetição) e rochas escaneadas
+  const ENV_TEX = {
+    floor: { f: 'monastery_stone_floor', m: 2.6 },
+    dirt: { f: 'brown_mud_rocks_01', m: 3.2 },
+    wall: { f: 'castle_wall_slates', m: 2.4 },
+    block: { f: 'stone_block_wall', m: 2.2 },
+    dress: { f: 'medieval_blocks_02', m: 2.0 },
+    wood: { f: 'old_planks_02', m: 1.6 },
+    iron: { f: 'rusty_metal_02', m: 1.2 },
+  };
+  const ENV_TEX_FILES = () => Object.values(ENV_TEX).flatMap((t) => ['diff', 'nor', 'arm'].map((k) => 'env3d/' + t.f + '_' + k + '.jpg'));
+  const ENV_MODELS = ['env3d/rock_07.glb', 'env3d/rock_09.glb'];
   const HPI = Math.PI / 2;
   // Armas: comprimento no mundo e ponto da empunhadura no eixo da arma (unidades do arquivo).
   // shield: preso no antebraço, com a face para fora · proc: feita aqui mesmo (cajado, varinha, tomo)
@@ -5034,7 +5046,7 @@
     }
     const loader = new EX.GLTFLoader();
     if (EX.MeshoptDecoder) loader.setMeshoptDecoder(EX.MeshoptDecoder);
-    const files = [...H_FILES(), 'dungeon.glb', 'bomb.glb'];
+    const files = [...H_FILES(), ...ENV_MODELS, 'bomb.glb'];
     // embutido: GLB em base64 → ArrayBuffer (nenhuma requisição de rede)
     const b64ToBuffer = (b64) => {
       const bin = atob(b64), u8 = new Uint8Array(bin.length);
@@ -5049,23 +5061,29 @@
       try { loader.parse(b64ToBuffer(EMBED[f]), '', res, rej); } finally { window.createImageBitmap = cib; }
     });
     const loadOne = (f) => (EMBED && EMBED[f] ? parseEmbedded(f) : loader.loadAsync(ASSET_BASE + f));
-    // texturas de roupa tingidas: <img> (data URI quando embutidas)
-    const loadTex = (f) => new Promise((res, rej) => {
+    // texturas avulsas: <img> (data URI quando embutidas). Roupas: convenção glTF (sem inverter);
+    // cenário: repetidas, e só a cor em sRGB (relevo e aspereza são dados lineares)
+    const loadTex = (f, key, env) => new Promise((res, rej) => {
       const img = new Image();
       img.onload = () => {
         const t = new THREE.Texture(img);
-        t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; t.anisotropy = 4; t.needsUpdate = true;
-        MODELS.tex[f] = t; res();
+        t.colorSpace = env && !/_diff/.test(f) ? THREE.NoColorSpace : THREE.SRGBColorSpace;
+        t.flipY = !!env; t.anisotropy = env ? 8 : 4;
+        if (env) { t.wrapS = t.wrapT = THREE.RepeatWrapping; }
+        t.needsUpdate = true;
+        MODELS.tex[key] = t; res();
       };
       img.onerror = () => rej(new Error('textura ' + f));
-      img.src = EMBED && EMBED['h/' + f] ? 'data:image/jpeg;base64,' + EMBED['h/' + f] : ASSET_BASE + 'h/' + f;
+      img.src = EMBED && EMBED[f] ? 'data:image/jpeg;base64,' + EMBED[f] : ASSET_BASE + f;
     });
-    return Promise.all([...files.map((f) => loadOne(f).then((g) => { MODELS.gltf[f] = g; })), ...H_TEX().map(loadTex)])
+    return Promise.all([...files.map((f) => loadOne(f).then((g) => { MODELS.gltf[f] = g; })),
+      ...H_TEX().map((f) => loadTex('h/' + f, f)), ...ENV_TEX_FILES().map((f) => loadTex(f, f, true))])
       .then(() => {
         // uma "cópia rasa" do clipe de captura por nome de movimento (mesmas trilhas, ação própria no mixer)
         const src = {};
         for (const c of MODELS.gltf[ANIM_FILE].animations) { src[c.name] = c; MODELS.clips[c.name] = c; }
         for (const k in ALIAS) if (src[ALIAS[k].src]) MODELS.clips[k] = new THREE.AnimationClip(k, src[ALIAS[k].src].duration, src[ALIAS[k].src].tracks);
+        MODELS.gltf['dungeon.glb'] = buildRealDungeon();
         MODELS.ready = true; return true;
       })
       .catch((err) => {
@@ -5219,6 +5237,219 @@
       v.aura = aura;
     }
     return v;
+  }
+  // =========================================================================
+  // Cenário realista: peças de arquitetura e objetos feitos aqui, com texturas fotográficas PBR
+  // (Poly Haven, CC0: cor, relevo e oclusão/aspereza/metal) e rochas escaneadas.
+  // Mesmos nomes e medidas das peças antigas: o montador do mapa não muda.
+  // =========================================================================
+
+  // UV de caixa em metros: cada face usa o eixo dominante da normal (densidade de textura igual em todas as peças)
+  function worldUV(g, m, ox, oy) {
+    const p = g.attributes.position, n = g.attributes.normal, uv = new Float32Array(p.count * 2);
+    ox = ox || 0; oy = oy || 0;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i), ax = Math.abs(n.getX(i)), ay = Math.abs(n.getY(i)), az = Math.abs(n.getZ(i));
+      let u, v;
+      if (ay >= ax && ay >= az) { u = x; v = z; } else if (ax >= az) { u = z * Math.sign(n.getX(i) || 1); v = y; } else { u = -x * Math.sign(n.getZ(i) || 1); v = y; }
+      uv[i * 2] = u / m + ox; uv[i * 2 + 1] = v / m + oy;
+    }
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    return g;
+  }
+  // junta várias geometrias (já posicionadas) numa só
+  function mergeGeo(list) {
+    const parts = list.map((g) => (g.index ? g.toNonIndexed() : g));
+    let n = 0; for (const g of parts) n += g.attributes.position.count;
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2);
+    let o = 0;
+    for (const g of parts) {
+      pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3);
+      if (g.attributes.uv) uv.set(g.attributes.uv.array, o * 2);
+      o += g.attributes.position.count;
+    }
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    return out;
+  }
+  // tecido dos estandartes: pintado num canvas (carmesim, borda dourada e brasão)
+  function clothTexture(kind) {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 512;
+    const x = c.getContext('2d');
+    const gr = x.createLinearGradient(0, 0, 256, 0);
+    gr.addColorStop(0, '#4a0c0c'); gr.addColorStop(0.5, '#7a1612'); gr.addColorStop(1, '#4a0c0c');
+    x.fillStyle = gr; x.fillRect(0, 0, 256, 512);
+    for (let i = 0; i < 2600; i++) { x.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,200,160'},${Math.random() * 0.06})`; x.fillRect(Math.random() * 256, Math.random() * 512, 1 + Math.random() * 2, 1); }
+    x.strokeStyle = '#b8903a'; x.lineWidth = 10; x.strokeRect(14, 14, 228, 450);
+    x.lineWidth = 3; x.strokeRect(28, 28, 200, 422);
+    x.fillStyle = '#c8a048';
+    if (kind === 'A') {
+      for (let r = 0; r < 5; r++) { x.beginPath(); const cy = 90 + r * 78; x.moveTo(128, cy - 30); x.lineTo(160, cy); x.lineTo(128, cy + 30); x.lineTo(96, cy); x.closePath(); x.fill(); }
+    } else {
+      x.beginPath(); x.moveTo(60, 150); x.lineTo(196, 150); x.lineTo(196, 260); x.quadraticCurveTo(196, 330, 128, 360); x.quadraticCurveTo(60, 330, 60, 260); x.closePath(); x.fill();
+      x.fillStyle = '#5a0e0c'; x.fillRect(118, 170, 20, 160); x.fillRect(84, 220, 88, 18);
+    }
+    // ponta em "V" na parte de baixo: recorte transparente
+    x.globalCompositeOperation = 'destination-out';
+    x.beginPath(); x.moveTo(0, 512); x.lineTo(128, 470); x.lineTo(256, 512); x.closePath(); x.fill();
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    return t;
+  }
+  function buildRealDungeon() {
+    const T = MODELS.tex;
+    const mats = {};
+    const pbr = (key, o) => {
+      const d = ENV_TEX[key], base = 'env3d/' + d.f + '_';
+      const m = new THREE.MeshStandardMaterial(Object.assign({
+        map: T[base + 'diff.jpg'], normalMap: T[base + 'nor.jpg'], roughnessMap: T[base + 'arm.jpg'], aoMap: T[base + 'arm.jpg'],
+        roughness: 1, metalness: 0,
+      }, o || {}));
+      m.userData.pbr = true;
+      return m;
+    };
+    mats.floor = pbr('floor'); mats.dirt = pbr('dirt');
+    mats.wall = pbr('wall'); mats.wallDark = pbr('wall', { color: '#8a7e76' });
+    mats.block = pbr('dress', { color: '#b4aca2' }); mats.dress = pbr('block', { color: new THREE.Color(1.4, 1.34, 1.26) });
+    mats.wood = pbr('wood', { color: '#b89a80' }); mats.woodDark = pbr('wood', { color: '#6a5444' });
+    mats.iron = pbr('iron', { color: '#3a3634', metalnessMap: T['env3d/rusty_metal_02_arm.jpg'], metalness: 1 });
+    mats.gold = new THREE.MeshStandardMaterial({ color: '#d8a848', metalness: 1, roughness: 0.32 }); mats.gold.userData.pbr = true;
+    for (const k of ['A', 'B']) { mats['cloth' + k] = new THREE.MeshStandardMaterial({ map: clothTexture(k), roughness: 0.92, side: THREE.DoubleSide, alphaTest: 0.5 }); mats['cloth' + k].userData.pbr = true; }
+    const root = new THREE.Group();
+    // peça = lista de [geometria posicionada, material]; junta por material
+    const piece = (name, parts) => {
+      const g = new THREE.Group(); g.name = name;
+      const by = {};
+      for (const [geom, mk] of parts) (by[mk] = by[mk] || []).push(geom);
+      for (const mk in by) { const m = new THREE.Mesh(mergeGeo(by[mk]), mats[mk] || mk); m.castShadow = true; m.receiveShadow = true; g.add(m); }
+      root.add(g);
+    };
+    const R = seeded(4242);
+    const texM = (mk) => { const t = ENV_TEX[mk.replace('Dark', '')]; return t ? t.m : 1; };
+    const box = (w, h, d, x, y, z, mk, o) => { // caixa com a base em y
+      const g = new THREE.BoxGeometry(w, h, d);
+      if (o && o.ry) g.rotateY(o.ry);
+      if (o && o.rx) g.rotateX(o.rx);
+      if (o && o.rz) g.rotateZ(o.rz);
+      g.translate(x, y + h / 2, z);
+      return [worldUV(g, texM(mk), R(), R()), mk];
+    };
+    const cyl = (r0, r1, h, x, y, z, mk, seg, o) => {
+      const g = new THREE.CylinderGeometry(r1, r0, h, seg || 16);
+      if (o && o.rx) g.rotateX(o.rx);
+      if (o && o.rz) g.rotateZ(o.rz);
+      g.translate(x, y + ((o && (o.rx || o.rz)) ? 0 : h / 2), z);
+      return [worldUV(g, texM(mk), R(), R()), mk];
+    };
+    // ---------- chão ----------
+    piece('floor_tile_large', [box(4, 0.12, 4, 0, -0.12, 0, 'floor')]);
+    piece('floor_dirt_large', [box(4, 0.12, 4, 0, -0.12, 0, 'dirt')]);
+    // ---------- muralhas (frente para +z) ----------
+    const wallTop = (mk) => [
+      box(4, 0.4, 1.2, 0, 0, 0, 'block'), // rodapé
+      box(4.02, 0.22, 1.16, 0, 3.78, 0, 'block'), // cornija
+      box(1.05, 0.62, 1.0, -1, 4.0, 0, mk), box(1.05, 0.62, 1.0, 1, 4.0, 0, mk), // ameias
+    ];
+    piece('wall', [box(4, 3.8, 1, 0, 0.3, 0, 'wall'), ...wallTop('wall')]);
+    piece('wall_cracked', [box(4, 3.8, 1, 0, 0.3, 0, 'wallDark'), box(4.02, 0.4, 1.2, 0, 0, 0, 'block'), box(4.02, 0.22, 1.16, 0, 3.78, 0, 'block'),
+      box(1.05, 0.62, 1.0, 1, 4.0, 0, 'wallDark'), box(0.8, 0.3, 0.7, -1.1, 4.0, 0.1, 'wallDark', { rz: 0.35 }),
+      box(0.7, 0.45, 0.6, -1.3, 0, 0.75, 'dress', { ry: 0.5 }), box(0.5, 0.35, 0.5, -0.5, 0, 0.8, 'dress', { ry: 1.1 }), box(0.35, 0.25, 0.4, 0.9, 0, 0.7, 'dress', { ry: 0.3 })]);
+    { // arco: parede com nicho em arco (vão escuro ao fundo)
+      const s = new THREE.Shape(); s.moveTo(-2, 0); s.lineTo(2, 0); s.lineTo(2, 3.8); s.lineTo(-2, 3.8); s.lineTo(-2, 0);
+      const h = new THREE.Path(); h.moveTo(-0.9, 0.4); h.lineTo(0.9, 0.4); h.lineTo(0.9, 2.2); h.absarc(0, 2.2, 0.9, 0, Math.PI, false); h.lineTo(-0.9, 0.4);
+      s.holes.push(h);
+      const eg = new THREE.ExtrudeGeometry(s, { depth: 1, bevelEnabled: false, curveSegments: 10 }); eg.translate(0, 0.3, -0.5);
+      eg.computeVertexNormals();
+      const arch = [];
+      for (let i = 0; i <= 8; i++) { const a = Math.PI * i / 8; arch.push(box(0.28, 0.34, 1.04, Math.cos(a) * 1.02, 2.33 + Math.sin(a) * 1.02, 0, 'block', { rz: a - Math.PI / 2 })); }
+      piece('wall_arched', [[worldUV(eg, ENV_TEX.wall.m), 'wall'], box(1.8, 2.8, 0.3, 0, 0.7, -0.42, 'woodDark'), ...wallTop('wall'), ...arch,
+        box(0.3, 1.9, 1.04, -1.05, 0.4, 0, 'block'), box(0.3, 1.9, 1.04, 1.05, 0.4, 0, 'block')]);
+    }
+    piece('wall_pillar', [box(4, 3.8, 1, 0, 0.3, 0, 'wall'), ...wallTop('wall'), box(1.3, 4.2, 1.5, 0, 0, 0, 'block'), box(1.5, 0.3, 1.62, 0, 4.2, 0, 'block')]);
+    // ---------- parapeito baixo e seus postes ----------
+    piece('barrier', [box(4, 0.85, 0.42, 0, 0, 0, 'block'), box(4.02, 0.16, 0.52, 0, 0.85, 0, 'block')]);
+    piece('barrier_column', [box(0.66, 1.2, 0.66, 0, 0, 0, 'block'), box(0.8, 0.14, 0.8, 0, 1.2, 0, 'block'), box(0.5, 0.12, 0.5, 0, 1.34, 0, 'block')]);
+    // ---------- colunas ----------
+    piece('pillar', [box(1.5, 0.32, 1.5, 0, 0, 0, 'block'), cyl(0.6, 0.56, 3.46, 0, 0.32, 0, 'wall', 18), box(1.36, 0.22, 1.36, 0, 3.78, 0, 'block')]);
+    piece('pillar_decorated', [box(2.2, 0.45, 2.0, 0, 0, 0.1, 'block'), box(1.9, 0.2, 1.75, 0, 0.45, 0.1, 'block'),
+      box(1.45, 3.0, 1.45, 0, 0.65, 0.1, 'wall'), box(1.62, 0.18, 1.62, 0, 1.3, 0.1, 'block'),
+      box(2.0, 0.35, 1.9, 0, 3.65, 0.1, 'block')]);
+    // ---------- tocha de parede (frente +z; a chama fica no copo) ----------
+    piece('torch_mounted', [box(0.24, 0.42, 0.05, 0, 0.02, 0.02, 'iron'), box(0.05, 0.05, 0.3, 0, 0.22, 0.17, 'iron'),
+      cyl(0.04, 0.05, 0.5, 0, 0.22, 0.29, 'wood', 8), cyl(0.07, 0.11, 0.16, 0, 0.62, 0.29, 'iron', 10)]);
+    // ---------- estandartes ----------
+    const banner = (k, w) => {
+      const g = new THREE.PlaneGeometry(w, 3.0, 6, 12);
+      const p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) { const y = p.getY(i), x = p.getX(i); p.setZ(i, Math.sin(x * 2.4 + y * 0.8) * 0.04 + (1.5 - y) * 0.02); }
+      g.computeVertexNormals(); g.translate(0, 2.18, 0.56);
+      return [[g, 'cloth' + k], cyl(0.035, 0.035, w + 0.3, 0, 3.72, 0.56, 'iron', 8, { rz: Math.PI / 2 }), box(0.06, 0.3, 0.2, -w / 2 - 0.05, 3.55, 0.45, 'iron'), box(0.06, 0.3, 0.2, w / 2 + 0.05, 3.55, 0.45, 'iron')];
+    };
+    piece('banner_patternA_red', banner('A', 1.3));
+    piece('banner_shield_red', banner('B', 1.6));
+    // ---------- barris, barriletes, caixotes ----------
+    const barrel = (r, h, x, y, z, o) => { // aduelas curvas + aros de ferro
+      const pts = [];
+      for (let i = 0; i <= 10; i++) { const t = i / 10; pts.push(new THREE.Vector2(r * (0.86 + 0.14 * Math.sin(t * Math.PI)), t * h)); }
+      const g = new THREE.LatheGeometry(pts, 20);
+      const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * TAU * r / ENV_TEX.wood.m, uv.getY(i) * h / ENV_TEX.wood.m);
+      const parts = [[g, 'wood'], cyl(r * 0.86, r * 0.86, 0.03, 0, h - 0.06, 0, 'woodDark', 20), cyl(r * 0.86, r * 0.86, 0.03, 0, 0.03, 0, 'woodDark', 20)];
+      for (const f of [0.1, 0.3, 0.7, 0.9]) { const rr = r * (0.86 + 0.14 * Math.sin(f * Math.PI)) + 0.012; parts.push(cyl(rr, rr, h * 0.045, 0, f * h - h * 0.022, 0, 'iron', 20)); }
+      for (const [gg] of parts) {
+        if (o && o.rx) { gg.translate(0, -h / 2, 0); gg.rotateX(o.rx); gg.translate(0, r, 0); }
+        if (o && o.ry) gg.rotateY(o.ry);
+        gg.translate(x, y, z);
+      }
+      return parts;
+    };
+    piece('barrel_large', barrel(0.9, 2.0, 0, 0, 0));
+    piece('barrel_small_stack', [...barrel(0.45, 0.98, -0.47, 0, 0, { rx: HPI }), ...barrel(0.45, 0.98, 0.47, 0, 0, { rx: HPI }), ...barrel(0.4, 0.85, 0, 0.9, 0)]);
+    piece('keg', [...barrel(0.85, 1.9, 0, 0.3, 0, { rx: HPI }), box(1.8, 0.35, 0.28, 0, 0, -0.6, 'woodDark'), box(1.8, 0.35, 0.28, 0, 0, 0.6, 'woodDark')]);
+    const crate = (s, x, y, z, ry) => { // tábuas + moldura e travessa diagonal
+      const out = [box(s * 0.94, s * 0.94, s * 0.94, 0, s * 0.03, 0, 'wood')], b = s * 0.09, hs = s / 2 - b / 2;
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) out.push(box(b, s, b, sx * hs, 0, sz * hs, 'woodDark'));
+      for (const sy of [0, s - b]) for (const sz of [-1, 1]) out.push(box(s, b, b, 0, sy, sz * hs, 'woodDark'));
+      for (const sy of [0, s - b]) for (const sx of [-1, 1]) out.push(box(b, b, s, sx * hs, sy, 0, 'woodDark'));
+      for (const sz of [-1, 1]) out.push(box(s * 1.2, b, b * 0.6, 0, s / 2 - b / 2, sz * (s / 2 + 0.005), 'woodDark', { rz: Math.PI / 4 }));
+      for (const [g] of out) { g.rotateY(ry); g.translate(x, y, z); }
+      return out;
+    };
+    piece('crates_stacked', [...crate(1.3, -0.2, 0, 0.1, 0.2), ...crate(0.9, 0.05, 1.3, 0, 0.7)]);
+    piece('box_stacked', [...crate(1.55, -0.85, 0, 0, 0.1), ...crate(1.55, 0.85, 0, 0.1, -0.15), ...crate(1.4, 0.05, 1.55, 0.05, 0.5)]);
+    // ---------- baú e moedas ----------
+    const coins = (n, cx, cz, rad, hmax) => {
+      const out = [];
+      for (let i = 0; i < n; i++) { const a = R() * TAU, d = Math.sqrt(R()) * rad, hh = 0.03 + R() * hmax; out.push(cyl(0.1, 0.1, hh, cx + Math.cos(a) * d, 0, cz + Math.sin(a) * d, 'gold', 12)); }
+      return out;
+    };
+    { const lid = new THREE.CylinderGeometry(0.62, 0.62, 1.5, 16, 1, false, 0, Math.PI); lid.rotateZ(HPI); lid.translate(0, 0.78, 0);
+      piece('chest_gold', [box(1.5, 0.8, 1.2, 0, 0, 0, 'wood'), [worldUV(lid, ENV_TEX.wood.m), 'wood'],
+        box(0.1, 1.42, 1.26, -0.5, 0, 0, 'iron'), box(0.1, 1.42, 1.26, 0.5, 0, 0, 'iron'), box(0.2, 0.26, 0.06, 0, 0.62, 0.61, 'gold'),
+        ...coins(10, 0.2, 0.9, 0.35, 0.08)]); }
+    { const heap = new THREE.SphereGeometry(0.62, 16, 8, 0, TAU, 0, HPI); heap.scale(1, 0.55, 1);
+      piece('coin_stack_large', [[heap, 'gold'], ...coins(14, 0, 0, 0.7, 0.45)]); }
+    // ---------- entulho: rochas escaneadas + blocos quebrados ----------
+    const rocks = ENV_MODELS.map((f) => { const s = MODELS.gltf[f].scene; let m = null; s.traverse((o) => { if (o.isMesh && !m) m = o; }); s.updateMatrixWorld(true); const g = m.geometry.clone().applyMatrix4(m.matrixWorld); g.computeBoundingBox(); const bb = g.boundingBox; g.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2); const sz = bb.getSize(new THREE.Vector3()); g.scale(1 / Math.max(sz.x, sz.z), 1 / Math.max(sz.x, sz.z), 1 / Math.max(sz.x, sz.z)); m.material.userData.pbr = true; mats['rock' + f] = m.material; return { g, mk: 'rock' + f }; });
+    const rubble = (x0, x1, n) => {
+      const out = [];
+      for (let i = 0; i < n; i++) {
+        const k = rocks[i % rocks.length], s = 0.9 + R() * 1.6, g = k.g.clone();
+        g.scale(s, s * (0.7 + R() * 0.8), s); g.rotateY(R() * TAU); g.translate(lerp(x0, x1, R()), i < n / 2 ? 0 : 0.5 + R() * 0.8, (R() - 0.5) * 1.6);
+        out.push([g, k.mk]);
+      }
+      for (let i = 0; i < n; i++) out.push(box(0.5 + R() * 0.7, 0.35 + R() * 0.4, 0.4 + R() * 0.5, lerp(x0, x1, R()), R() * 0.6, (R() - 0.5) * 2, 'block', { ry: R() * TAU, rz: (R() - 0.5) * 0.8 }));
+      return out;
+    };
+    piece('rubble_half', rubble(0.4, 3.6, 5));
+    piece('rubble_large', rubble(-3.6, 3.6, 9));
+    // ---------- grade de ferro (portões) ----------
+    { const bars = [];
+      for (let x = -1.85; x <= 1.86; x += 0.37) { bars.push(cyl(0.045, 0.045, 3.2, x, 0.1, 0, 'iron', 6)); bars.push([new THREE.ConeGeometry(0.07, 0.22, 6).translate(x, 0.02, 0), 'iron']); }
+      for (const y of [0.6, 1.7, 2.8]) bars.push(box(4, 0.1, 0.12, 0, y, 0, 'iron'));
+      bars.forEach((b) => worldUV(b[0], 1.2));
+      piece('portcullis', bars); }
+    return { scene: root, mats };
   }
   function buildView(kind, elite) {
     if (kind === 'cannon') return buildCannonView();
@@ -6446,14 +6677,27 @@
     setTier(PERF.tier);
   }
 
-  // Cenário com as peças KayKit (instanciadas: poucas chamadas de desenho)
+  // Cenário com as peças realistas (instanciadas: poucas chamadas de desenho)
   function buildDungeonEnv(map, g) {
     const pieces = {};
     for (const c of g.scene.children) pieces[c.name] = c;
     g.scene.updateMatrixWorld(true);
     let seed = 0; for (const ch of map.id) seed = (seed * 31 + ch.charCodeAt(0)) % 100000;
     const R = seeded(seed + 7);
-    const inst = {};
+    const matCache = new Map();
+    const envMat = (m, floorish) => {
+      const key = m.uuid + (floorish ? 'f' : '');
+      if (!matCache.has(key)) {
+        const mm = Q.lambert ? new THREE.MeshLambertMaterial({ map: m.map, color: m.color.clone(), side: m.side, alphaTest: m.alphaTest }) : m.clone();
+        if (!m.userData.pbr) { // (texturas fotográficas já têm o tom e a aspereza certos)
+          mm.color.multiplyScalar(floorish ? 0.62 : 0.85);
+          if (mm.roughness !== undefined) mm.roughness = Math.max(mm.roughness, 0.8);
+        }
+        matCache.set(key, mm);
+      }
+      return matCache.get(key);
+    };
+    const inst = {}, solids = {};
     const put = (name, x, y, z, ry, s, sy, sz) => { (inst[name] = inst[name] || []).push([x, y, z, ry || 0, s || 1, sy || s || 1, sz || s || 1]); };
     // piso: lajotas na área de luta, terra no corredor
     for (let x = -OUT_W / 2 + 2; x < OUT_W / 2; x += 4) for (let z = -OUT_H / 2 + 2; z < OUT_H / 2; z += 4) {
@@ -6533,35 +6777,24 @@
         continue;
       }
       const wu = ob.w * U, hu = ob.h * U, along = wu >= hu, Lg = along ? wu : hu, T = along ? hu : wu, ry = along ? 0 : Math.PI / 2;
-      if (ob.tall) {
+      if (!g.mats) { // (peças antigas: esticadas)
         const n = Math.max(1, Math.round(Lg / 4)), seg = Lg / n;
-        for (let i = 0; i < n; i++) {
-          const o = -Lg / 2 + seg * (i + 0.5);
-          put(R() < 0.2 ? 'wall_cracked' : 'wall', x + (along ? o : 0), 0, z + (along ? 0 : o), ry, seg / 4, 0.9, Math.max(0.6, T / 1));
-        }
-      } else if (Lg < 3.2 && T > 1.2) {
+        for (let i = 0; i < n; i++) { const o = -Lg / 2 + seg * (i + 0.5); put(ob.tall ? 'wall' : 'barrier', x + (along ? o : 0), 0, z + (along ? 0 : o), ry, seg / 4, ob.tall ? 0.9 : 1.3, Math.max(0.6, T)); }
+      } else if (!ob.tall && Lg < 3.2 && T > 1.2) {
         put('crates_stacked', x, 0, z, R() < 0.5 ? 0 : Math.PI / 2, Math.min(wu, hu) / 2.1, 0.75, Math.min(wu, hu) / 2.1);
-      } else {
-        const n = Math.max(1, Math.round(Lg / 4)), seg = Lg / n;
-        for (let i = 0; i < n; i++) {
-          const o = -Lg / 2 + seg * (i + 0.5);
-          put('barrier', x + (along ? o : 0), 0, z + (along ? 0 : o), ry, seg / 4, 1.3, Math.max(1, T / 0.5));
-        }
+      } else { // muro sob medida: a textura mantém a escala real
+        const sb = (w, h, d, y, mk) => { const bg = new THREE.BoxGeometry(along ? w : d, h, along ? d : w); bg.translate(x, y + h / 2, z); (solids[mk] = solids[mk] || []).push(worldUV(bg, 2.3)); };
+        if (ob.tall) { sb(Lg, 0.4, T + 0.16, 0, 'block'); sb(Lg, 3.1, T, 0.3, 'wall'); sb(Lg + 0.04, 0.2, T + 0.12, 3.4, 'block'); }
+        else { sb(Lg, 1.1, T, 0, 'block'); sb(Lg + 0.04, 0.16, T + 0.1, 1.1, 'block'); }
       }
+    }
+    for (const mk in solids) {
+      const m = new THREE.Mesh(mergeGeo(solids[mk]), envMat(g.mats[mk], false));
+      m.castShadow = true; m.receiveShadow = true; m.userData.ownGeo = true;
+      ENV.root.add(m);
     }
     // uma InstancedMesh por malha de cada peça
     const CAST = new Set(['pillar_decorated', 'pillar', 'barrel_large', 'barrel_small_stack', 'crates_stacked', 'keg', 'box_stacked', 'chest_gold', 'barrier', 'barrier_column', 'wall', 'wall_pillar', 'wall_cracked', 'wall_arched', 'banner_patternA_red', 'banner_shield_red']);
-    const matCache = new Map();
-    const envMat = (m, floorish) => {
-      const key = m.uuid + (floorish ? 'f' : '');
-      if (!matCache.has(key)) {
-        const mm = Q.lambert ? new THREE.MeshLambertMaterial({ map: m.map, color: m.color.clone() }) : m.clone();
-        mm.color.multiplyScalar(floorish ? 0.62 : 0.85);
-        if (mm.roughness !== undefined) mm.roughness = Math.max(mm.roughness, 0.8);
-        matCache.set(key, mm);
-      }
-      return matCache.get(key);
-    };
     const pm = new THREE.Matrix4(), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), eu = new THREE.Euler(), v3 = new THREE.Vector3(), s3 = new THREE.Vector3();
     for (const name in inst) {
       const piece = pieces[name];
@@ -6613,7 +6846,7 @@
     bladeViews.clear();
   }
   function disposeProp(pv) { pv.g.traverse((o) => { if (o.userData.ownMat && o.material) o.material.dispose(); if (o.userData.ownGeo && o.geometry) o.geometry.dispose(); }); }
-  // cópia de uma peça do pacote Dungeon, com materiais próprios (para tingir/brilhar)
+  // cópia de uma peça do cenário, com materiais próprios (para tingir/brilhar)
   function piece(name, tintC, emis) {
     const g = MODELS.ready && MODELS.gltf['dungeon.glb'];
     const src = g && g.scene.getObjectByName(name);
@@ -6669,8 +6902,8 @@
       const inner = new THREE.Group(); g.add(inner); pv.inner = inner;
       for (let i = 0; i < n; i++) {
         const o = -L / 2 + seg * (i + 0.5);
-        const b = piece('barrier', '#7a8290', ['#1a2230', 0.2]) || primitive(new THREE.BoxGeometry(seg, 1, 0.3).translate(0, 0.5, 0), '#4a4f5a', { metalness: 0.8, roughness: 0.4 });
-        b.scale.set(seg / 4, 3.0, 1.6); b.position.set(along ? o : 0, 0, along ? 0 : o); b.rotation.y = along ? 0 : Math.PI / 2;
+        const b = piece('portcullis', '#a8b0bc', ['#1a2230', 0.15]) || primitive(new THREE.BoxGeometry(seg, 1, 0.3).translate(0, 0.5, 0), '#4a4f5a', { metalness: 0.8, roughness: 0.4 });
+        if (b.isMesh && b.geometry.type === 'BoxGeometry') b.scale.set(1, 3.3, 1); else b.scale.set(seg / 4, 1, 1); b.position.set(along ? o : 0, 0, along ? 0 : o); b.rotation.y = along ? 0 : Math.PI / 2;
         inner.add(b);
       }
       inner.position.y = 4; pv.drop = 0;

@@ -4,7 +4,7 @@
 //   desktop → desktop/app/       (qualidade padrão Ultra)
 //   android → android/www/       (qualidade padrão Média)
 // index.html traz Three.js, o jogo e os modelos embutidos; os recursos grandes vão em arquivos ao lado:
-//   assets_h.js (personagens e animações) · assets_sfx.js (efeitos + partículas) · assets_env.js (HDRIs) · audio/music/*.mp3 (trilha, tocada em streaming)
+//   assets_h.js (personagens e animações) · assets_world.js (cenário) · assets_sfx.js (efeitos + partículas) · assets_env.js (HDRIs) · audio/music/*.mp3 (trilha, tocada em streaming)
 import fs from 'fs';
 import { execFileSync } from 'child_process';
 import path from 'path';
@@ -37,7 +37,7 @@ const glb = async (p) => {
   return Buffer.from(await io.writeBinary(doc)).toString('base64');
 };
 for (const f of fs.readdirSync(path.join(game, 'assets')).filter((f) => f.endsWith('.glb'))) {
-  if (f === 'dungeon.glb' || f === 'bomb.glb') models[f] = await glb(path.join(game, 'assets', f));
+  if (f === 'bomb.glb') models[f] = await glb(path.join(game, 'assets', f));
 }
 // personagens realistas (h/): malhas, clipes de captura e texturas tingidas
 for (const f of fs.readdirSync(path.join(game, 'assets', 'h'))) {
@@ -58,16 +58,24 @@ for (const f of fs.readdirSync(path.join(game, 'audio', 'sfx')).filter((f) => f.
 for (const f of fs.readdirSync(path.join(game, 'assets', 'fx')).filter((f) => f.endsWith('.png'))) sfx['fx/' + f] = b64(path.join(game, 'assets', 'fx', f));
 const env = {};
 for (const f of fs.readdirSync(path.join(game, 'assets', 'env')).filter((f) => f.endsWith('.hdr'))) env['env/' + f] = b64(path.join(game, 'assets', 'env', f));
+// cenário realista (env3d/): texturas fotográficas e rochas
+const world = {};
+for (const f of fs.readdirSync(path.join(game, 'assets', 'env3d'))) {
+  const p = path.join(game, 'assets', 'env3d', f);
+  if (f.endsWith('.glb')) world['env3d/' + f] = await glb(p);
+  else if (f.endsWith('.jpg')) world['env3d/' + f] = fs.readFileSync(p).toString('base64');
+}
 console.log('assets_h.js', writeAssets('assets_h.js', human));
+console.log('assets_world.js', writeAssets('assets_world.js', world));
 console.log('assets_sfx.js', writeAssets('assets_sfx.js', sfx));
 console.log('assets_env.js', writeAssets('assets_env.js', env));
 
 // 4) Trilha: arquivos mp3 (tocados em streaming, não entram na memória de uma vez)
 fs.mkdirSync(path.join(outDir, 'audio', 'music'), { recursive: true });
-// No Android a trilha é recodificada a 112 kb/s (APK abaixo de 100 MB) se houver ffmpeg (variável LR_FFMPEG)
+// Nos pacotes a trilha é recodificada (Android 112 kb/s, Windows 128 kb/s: arquivos abaixo de 100 MB) se houver ffmpeg (variável LR_FFMPEG)
 for (const f of fs.readdirSync(path.join(game, 'audio', 'music')).filter((f) => f.endsWith('.mp3'))) {
   const src = path.join(game, 'audio', 'music', f), dst = path.join(outDir, 'audio', 'music', f);
-  if (target === 'android' && process.env.LR_FFMPEG) execFileSync(process.env.LR_FFMPEG, ['-v', 'error', '-y', '-i', src, '-codec:a', 'libmp3lame', '-b:a', '112k', dst]);
+  if (target !== 'web' && process.env.LR_FFMPEG) execFileSync(process.env.LR_FFMPEG, ['-v', 'error', '-y', '-i', src, '-codec:a', 'libmp3lame', '-b:a', target === 'android' ? '112k' : '128k', dst]);
   else fs.copyFileSync(src, dst);
 }
 
@@ -85,6 +93,7 @@ const page = `${head}<style>${css}</style>
 <script>${esc(three)}</script>
 <script>window.__ASSETS=Object.assign(window.__ASSETS||{},${JSON.stringify(models)});</script>
 <script src="assets_h.js"></script>
+<script src="assets_world.js"></script>
 <script src="assets_sfx.js"></script>
 <script src="assets_env.js"></script>
 <script>${esc(js)}</script>

@@ -10,9 +10,17 @@
 - **Lowpoly Medieval Weapons** — `h/w_*.glb` (espada, montante, machados, adaga, martelo, arco e escudos)
   https://quaternius.com · https://quaternius.itch.io
 
-## Cenário — KayKit, por Kay Lousberg (www.kaylousberg.com) · CC0 1.0
-- **KayKit Dungeon Remastered 1.0** — `dungeon.glb` (26 peças reunidas num arquivo)
-  https://github.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0
+## Cenário — texturas e rochas da Poly Haven (polyhaven.com) · CC0 1.0
+- Texturas fotográficas PBR (cor, relevo e oclusão/aspereza/metal), em `env3d/`:
+  `monastery_stone_floor` (lajes da arena), `brown_mud_rocks_01` (terra dos corredores),
+  `castle_wall_slates` (muralhas e colunas), `medieval_blocks_02` (rodapés, cornijas, parapeitos),
+  `stone_block_wall` (blocos quebrados), `old_planks_02` (barris, caixotes, baú), `rusty_metal_02` (ferragens)
+- Rochas escaneadas `rock_07` e `rock_09` (entulho), com menos polígonos
+  https://polyhaven.com/textures · https://polyhaven.com/models
+- A arquitetura (muralhas com ameias, nichos em arco, colunas, parapeitos, grade de ferro), os barris,
+  caixotes, baú, moedas, tochas e estandartes são modelados no próprio jogo com essas texturas.
+
+## Bomba — KayKit, por Kay Lousberg (www.kaylousberg.com) · CC0 1.0
 - **KayKit Adventurers Character Pack 1.0** — `bomb.glb`
 
 Otimizados com glTF-Transform (só o que o jogo usa, compressão meshopt).
