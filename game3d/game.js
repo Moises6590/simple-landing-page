@@ -308,7 +308,7 @@
   // =========================================================================
   const Input = {
     keys: new Set(),
-    held: { attack: false, heavy: false, parry: false, dash: false, sp1: false, sp2: false, bomb: false, rage: false, heal: false },
+    held: { attack: false, heavy: false, parry: false, dash: false, jump: false, pull: false, sp1: false, sp2: false, bomb: false, rage: false, heal: false },
     stick: { x: 0, y: 0, active: false, id: null, ox: 0, oy: 0 },
     mouse: { x: 0, y: 0, aim: false },
     buffer: { act: null, t: 0 },
@@ -323,7 +323,7 @@
   const KEYMAP = {
     KeyJ: 'attack', KeyZ: 'attack',
     KeyK: 'heavy', KeyX: 'heavy',
-    Space: 'dash', ShiftLeft: 'dash', ShiftRight: 'dash',
+    Space: 'jump', KeyI: 'jump', ShiftLeft: 'dash', ShiftRight: 'dash', KeyU: 'pull', KeyO: 'pull',
     KeyL: 'parry', KeyE: 'parry', KeyC: 'parry',
     Tab: 'lock', KeyT: 'lock', KeyR: 'rage', KeyH: 'heal', KeyV: 'heal', Digit3: 'heal',
     KeyQ: 'sp1', Digit1: 'sp1', KeyF: 'sp2', Digit2: 'sp2', KeyG: 'bomb', Digit4: 'bomb',
@@ -530,7 +530,7 @@
     if (o.y > hh) { o.y = hh; if (o.vy > 0) o.vy = 0; hit = true; }
     for (let i = 0; i < OBST.length; i++) {
       const ob = OBST[i];
-      if (o.fly && !ob.tall) continue; // drones passam por cima da cobertura baixa
+      if ((o.fly || (o === P && P.z > 44)) && !ob.tall) continue; // drones (e o herói no salto) passam por cima da cobertura baixa
       let nx, ny, pen;
       if (ob.c) {
         const dx = o.x - ob.x, dy = o.y - ob.y, d = len(dx, dy) || 0.001, min = ob.r + o.r;
@@ -921,7 +921,7 @@
     combo: 0, comboT: 0,
     slowT: 0, slowScale: 1,
     trauma: 0, hurtFlash: 0,
-    enemies: [], projectiles: [], particles: [], texts: [], orbs: [], slashes: [], ghosts: [], rings: [],
+    enemies: [], projectiles: [], particles: [], texts: [], orbs: [], slashes: [], ghosts: [], chains: [], rings: [],
     lobs: [], fonts: [], embers: [], codexSeen: {},
     mode: 'campaign', // campaign | trial (Provação das Cinzas: ondas infinitas)
     spawnQueue: [], spawnT: 0, waveDelay: 0, maxAlive: 5, maxMelee: 2, maxRanged: 1, maxDrone: 2,
@@ -1191,6 +1191,7 @@
     hv: HEAVY, lock: null, rage: 0, sinceDash: 9, atkKind: 'combo', execTarget: null, execDone: false, pulse: 0,
     relics: [], mods: null, flasks: 3, maxFlasks: 3, flaskFill: 0, bonusHp: 0, crownUsed: false, fontProg: 0, lavaT: 0,
     bombs: 2, riposteT: 0, riposteE: null, guardT: 0, spec: null, veilT: 0, furyT: 0, stanceT: 0, grabbed: null, heldBy: null,
+    vz: 0, air: false, airJumps: 0, airDashes: 0, airBudget: 0, hangT: 0, followT: 0, followE: null, followNext: null, airIdx: -1, airWindow: 0, landT: 0, pullE: null, pullCd: 0, flip: 0, flipT: 0,
   };
   // relics/bonusHp vêm do início do capítulo (checkpoint); start = posição inicial do mapa
   function resetPlayer(relics, bonusHp, start) {
@@ -1213,6 +1214,7 @@
       freeze: 0, confirm: false, flinchT: 0, flinchA: 0, flinchK: 1, actionId: 0,
       hv: HEAVY, lock: null, rage: 0, sinceDash: 9, atkKind: 'combo', execTarget: null, execDone: false, pulse: 0,
       riposteT: 0, riposteE: null, guardT: 0, spec: null, veilT: 0, furyT: 0, stanceT: 0, grabbed: null, heldBy: null, blockHitT: 0,
+      vz: 0, air: false, airJumps: 0, airDashes: 0, airBudget: 0, hangT: 0, followT: 0, followE: null, followNext: null, airIdx: -1, airWindow: 0, landT: 0, pullE: null, pullCd: 0, flip: 0, flipT: 0,
     });
     P.hitSet.clear();
     if (typeof onHeroChanged === 'function') onHeroChanged();
@@ -1275,8 +1277,10 @@
 
   // ---------- Medidor de estilo ----------
   const STYLE_RANKS = [
-    { at: 0, name: 'D', color: '#9aa3b5', mult: 1 }, { at: 90, name: 'C', color: '#8fd3ff', mult: 1.1 }, { at: 200, name: 'B', color: '#6ef08a', mult: 1.25 },
-    { at: 340, name: 'A', color: '#ffe27a', mult: 1.45 }, { at: 520, name: 'S', color: '#ff9a3c', mult: 1.7 }, { at: 760, name: 'BRASA VIVA', color: '#ff4d3c', mult: 2.1 },
+    { at: 0, name: 'D', word: 'DESPERTA', color: '#9aa3b5', mult: 1 }, { at: 80, name: 'C', word: 'CERTEIRA', color: '#8fd3ff', mult: 1.1 },
+    { at: 170, name: 'B', word: 'BRAVA', color: '#6ef08a', mult: 1.25 }, { at: 290, name: 'A', word: 'ARDENTE', color: '#ffe27a', mult: 1.45 },
+    { at: 440, name: 'S', word: 'SELVAGEM', color: '#ff9a3c', mult: 1.7 }, { at: 620, name: 'SS', word: 'SANGUINÁRIA', color: '#ff5a3c', mult: 2.0 },
+    { at: 830, name: 'SSS', word: 'SUPREMA BRASA', color: '#ff2f4a', mult: 2.4 },
   ];
   const STYLE = { pts: 0, last: [], rank: 0, peak: 0, sum: 0, time: 0 };
   function styleRank() { let r = 0; for (let i = 0; i < STYLE_RANKS.length; i++) if (STYLE.pts >= STYLE_RANKS[i].at) r = i; return r; }
@@ -1288,10 +1292,11 @@
     }
     STYLE.pts = Math.min(1000, STYLE.pts + pts);
     const r = styleRank();
-    if (r > STYLE.rank && r >= 3) addText(P.x, P.y - 52, STYLE_RANKS[r].name + '!', STYLE_RANKS[r].color, r >= 5 ? 22 : 17);
+    if (r > STYLE.rank) { STYLE.flash = 0.6; if (r >= 3) { addText(P.x, P.y - 52, STYLE_RANKS[r].word + '!', STYLE_RANKS[r].color, r >= 5 ? 22 : 17); Sound.play(r >= 5 ? 'supreme' : 'uiok'); } }
     STYLE.rank = r; STYLE.peak = Math.max(STYLE.peak, r);
   }
   function styleTick(dt) {
+    if (STYLE.flash > 0) STYLE.flash -= dt;
     if (G.state !== 'play') return;
     STYLE.pts = Math.max(0, STYLE.pts - (6 + STYLE.pts * 0.05) * dt);
     STYLE.rank = styleRank();
@@ -1313,6 +1318,8 @@
       case 'parry': return P.t >= P.mods.parryWin;
       case 'guard': return true;
       case 'stance': return true;
+      case 'jump': return true;
+      case 'airdash': return P.t >= 0.1;
       default: return false;
     }
   }
@@ -1392,6 +1399,9 @@
       if (P.heldBy && !P.heldBy.dead) { P.heldBy.st -= 0.16; addText(P.x, P.y - 30, '!', '#ffe27a', 14); }
       return true;
     }
+    if (act === 'jump') return tryJump(mv);
+    if (act === 'pull') return tryPull(mv);
+    if (P.air) return airAction(act, mv);
     if (act === 'attack' && canAttackNow()) {
       if (P.riposteT > 0 && P.riposteE && !P.riposteE.dead) { startAttack(P.set.riposte, mv, P.riposteE); P.riposteT = 0; return true; }
       const ex = execTarget(mv);
@@ -1418,6 +1428,8 @@
         const b = [P.set.b1, P.set.b2, P.set.b3, P.set.b3][P.comboIdx];
         if (b) { startAttack(b, mv); P.comboIdx = -1; P.comboWindow = 0; P.st -= 10; P.stDelay = 0.5; return true; }
       }
+      // esquiva + pesado: estocada relâmpago (atravessa a sala até o alvo)
+      if ((P.state === 'dash' || P.sinceDash < 0.2) && P.set.b3 && !P.set.b3.cast) { startAttack(stingerOf(P.set), mv); P.comboIdx = -1; P.comboWindow = 0; P.st -= 10; P.stDelay = 0.5; return true; }
       startCharge(mv);
       return true;
     }
@@ -1487,6 +1499,12 @@
     lastVariant[clip] = i;
     return list[i];
   }
+  const STINGCACHE = new WeakMap();
+  function stingerOf(set) {
+    let m = STINGCACHE.get(set);
+    if (!m) { m = Object.assign({}, set.b3, { id: 'relampago', name: 'ESTOCADA RELÂMPAGO', wind: 0.07, lunge: 1300, range: set.b3.range + 20, stinger: true, pierce: true }); STINGCACHE.set(set, m); }
+    return m;
+  }
   function startAttack(a, mv, forced) {
     a = a || P.set.l1;
     { const vr = pickVariant(a.clip); P.atkClip = vr[0]; P.atkRoll = vr[1] * (Math.random() < 0.5 ? 1 : 0.8); P.atkPitch = vr[2]; }
@@ -1502,6 +1520,12 @@
     if (a.air && aim.target) P.lungeScale = clamp((aim.dist - P.r - aim.target.r) / 160, 0.3, 1.6);
     if (a.riposte) { slowmo(0.45, 0.4); P.iframe = Math.max(P.iframe, a.wind + a.active + 0.05); if (P.hero === 'selen') P.atk = Object.assign({}, a, { dmg: a.dmg * 1.25 }); }
     P.threat = a.cast ? null : { id: ++threatId, kind: a.arc >= TAU - 0.01 ? 'heavy' : 'light', range: a.range, arc: a.arc };
+    if (a.aerial) { // golpe no ar: o herói quase para de cair enquanto bate
+      P.vz = Math.max(P.vz * 0.3, 40);
+      if (P.airBudget > 0) { P.airBudget--; P.hangT = a.wind + a.active + 0.14; }
+      const tg = aim.target;
+      if (tg && tg.state === 'air') P.vz = clamp((tg.z - P.z) * 3, -160, 160); // encosta na altura do alvo
+    }
     // grito no golpe forte; no leve, só de vez em quando (senão cansa)
     if (a.finisher || a.launch || a.guardBreak || a.riposte || a.slam) heroVoice('big', { chance: 0.85 });
     else heroVoice('atk', { chance: a.cast ? 0.2 : 0.42, gap: 0.3 });
@@ -1562,6 +1586,301 @@
     if (D.blink) { burst(P.x, P.y, 0, 14, '#8a8fa8', 220, true); Sound.play('blink'); }
     else Sound.play('dash');
     heroVoice('jump', { chance: 0.3, gap: 0.5 });
+  }
+  // =========================================================================
+  // Voo: salto, combo no ar, mergulho, impulso no ar, passo no inimigo e corrente.
+  // Ritmo estudado em vídeo de combos de ação (só como referência de tempo e estilo):
+  // o lançador sobe o inimigo, o herói vai atrás, os golpes no ar seguram os dois lá em cima,
+  // o passo no inimigo recarrega o salto e o mergulho crava todo mundo no chão.
+  // =========================================================================
+  const JUMP = { v: 700, air: 580, step: 640, g: 2300, drift: 0.85, budget: 7 };
+  const DIVE = { dmg: 24, radius: 120, poise: 90, speed: 1750 };
+  const PULL = { range: 470, time: 0.26, cd: 0.55 };
+  const AIRCACHE = new WeakMap();
+  // três golpes aéreos por arma, tirados dos golpes de chão (mesmos clipes de captura)
+  function airMoves(set) {
+    let A = AIRCACHE.get(set);
+    if (A) return A;
+    A = [set.l1, set.l2, set.l3].map((m, i) => {
+      const cast = !!m.cast, fin = i === 2;
+      return Object.assign({}, m, {
+        id: 'ar' + i, name: i === 0 ? 'RAJADA NO AR' : fin ? (cast ? '' : 'DESCIDA') : '', aerial: true,
+        wind: m.wind * 0.9, rec: m.rec * (fin ? 0.95 : 0.7),
+        lunge: cast ? 0 : 150, range: cast ? m.range : Math.max(74, m.range), arc: cast ? m.arc : Math.max(m.arc, 2.3),
+        dmg: m.dmg !== undefined ? m.dmg * 0.85 : m.dmg, kb: fin && !cast ? 420 : 30, poise: (m.poise || 10) * 1.2, stop: (m.stop || 0.04) * (fin ? 1.4 : 1),
+        launch: 0, slam: false, knockdown: false, pierce: false, hop: 0, finisher: fin, airFinish: fin && !cast,
+      });
+    });
+    AIRCACHE.set(set, A);
+    return A;
+  }
+  const canJumpNow = () => {
+    if (P.air) return false;
+    switch (P.state) {
+      case 'idle': case 'guard': case 'stance': case 'drink': return true;
+      case 'parry': return P.t >= P.mods.parryWin;
+      case 'dash': return P.t >= dashT() * 0.25;
+      case 'charge': return true;
+      case 'attack': return P.t < P.atk.wind * 0.5 || (inStrike(P.atk) ? strikeCancel(P.atk) : afterStrike(P.atk, WHIFF_LOCK));
+      case 'heavy': return inStrike(P.hv) ? strikeCancel(P.hv) : P.t >= P.hv.wind && afterStrike(P.hv, WHIFF_LOCK * 1.5);
+      default: return false;
+    }
+  };
+  const canAirJumpNow = () => P.air && (P.state === 'jump' || (P.state === 'airdash' && P.t >= 0.08) || (P.state === 'attack' && P.atk && P.atk.aerial && (inStrike(P.atk) ? strikeCancel(P.atk) : afterStrike(P.atk, WHIFF_LOCK))));
+  function takeOff(vz) {
+    P.air = true; P.vz = vz; P.z = Math.max(P.z, 1); P.hangT = 0;
+    P.state = 'jump'; P.t = 0; P.actionId++; P.threat = null; P.atk = null;
+    P.airIdx = -1; P.airWindow = 0; P.comboWindow = 0; P.comboIdx = -1;
+  }
+  function startJump(mv) {
+    const ground = !P.air;
+    takeOff(ground ? JUMP.v : JUMP.air);
+    if (ground) {
+      P.airJumps = 1; P.airDashes = 1; P.airBudget = JUMP.budget;
+      fxq('dust', P.x, P.y, 34); Sound.play('dash'); P.flip = 0;
+    } else { P.flip = 1; P.flipT = 0; Sound.play('swing'); } // salto duplo: cambalhota
+    if (mv.m > 0.1) { P.vx = P.vx * 0.5 + mv.x * P.mods.speed * 0.7; P.vy = P.vy * 0.5 + mv.y * P.mods.speed * 0.7; }
+    heroVoice('jump', { chance: ground ? 0.35 : 0.55, gap: 0.4 });
+  }
+  // alvo para o passo no inimigo: alguém colado, na altura dos pés
+  function stepTarget() {
+    if (!(P.z > 26 && (P.state !== 'jump' || P.t > 0.1))) return null;
+    let best = null, bd = Infinity;
+    for (const e of G.enemies) {
+      if (!targetable(e) || e.state === 'lurk' || e.isStatic) continue;
+      const d = len(e.x - P.x, e.y - P.y);
+      if (d > e.r + P.r + 34) continue;
+      const top = (e.z || 0) + (e.boss ? 110 : 80);
+      if (P.z < (e.z || 0) - 30 || P.z > top + 50) continue;
+      if (d < bd) { bd = d; best = e; }
+    }
+    return best;
+  }
+  function enemyStep(e, mv) {
+    takeOff(JUMP.step);
+    P.airJumps = 1; P.airDashes = 1; P.airBudget = JUMP.budget; P.flip = 1; P.flipT = 0;
+    if (e.state === 'air') { e.vz = Math.min(e.vz, -160); e.hangT = 0; } else { e.flinchT = FLINCH_TIME; e.flinchA = Math.atan2(e.y - P.y, e.x - P.x); e.flinchK = 0.8; }
+    if (mv.m > 0.1) { P.vx = mv.x * P.mods.speed * 0.8; P.vy = mv.y * P.mods.speed * 0.8; }
+    Sound.play('step'); Sound.play('dash');
+    burst(P.x, P.y, -Math.PI / 2, 8, '#d8d0c0', 200, true);
+    addText(P.x, P.y - 40, 'PASSO NO INIMIGO', '#b8e0ff', 13);
+    styleAdd(26, 'passo');
+  }
+  function tryJump(mv) {
+    if (P.state === 'dead' || P.state === 'grabbed' || P.state === 'special' || P.state === 'execute') return false;
+    if (P.air) {
+      if (!canAirJumpNow()) return false;
+      const st = stepTarget();
+      if (st) { enemyStep(st, mv); return true; }
+      if (P.airJumps > 0) { P.airJumps--; startJump(mv); return true; }
+      return false;
+    }
+    if (!canJumpNow()) return false;
+    // logo depois do lançador que acertou: vai atrás do alvo
+    if (P.followT > 0 && P.followE && !P.followE.dead && P.followE.state === 'air') { followJump(P.followE); return true; }
+    startJump(mv);
+    return true;
+  }
+  // salto que persegue um inimigo lançado: chega na altura do topo da subida dele, colado nele
+  function followJump(e) {
+    const apex = e.z + Math.max(0, e.vz) * Math.max(0, e.vz) / (2 * GRAV);
+    const vz = Math.sqrt(2 * JUMP.g * (apex + 8));
+    takeOff(vz);
+    P.airJumps = 1; P.airDashes = 1; P.airBudget = JUMP.budget; P.flip = 0;
+    const rise = vz / JUMP.g, a = Math.atan2(e.y - P.y, e.x - P.x), d = len(e.x - P.x, e.y - P.y);
+    const need = Math.max(0, d - (P.r + e.r + 18));
+    P.vx = Math.cos(a) * need / rise + e.vx * 0.5; P.vy = Math.sin(a) * need / rise + e.vy * 0.5;
+    P.face = a; P.followT = 0; P.followE = null; P.followNext = null;
+    e.hangT = Math.max(e.hangT || 0, rise * 0.6);
+    fxq('dust', P.x, P.y, 50); Sound.play('dash'); Sound.play('swing');
+    addText(P.x, P.y - 40, 'PERSEGUIÇÃO', '#ffcf8a', 14);
+    styleAdd(18, 'perseguir');
+    heroVoice('jump', { chance: 0.6, gap: 0.3 });
+  }
+  // no ar: ataque = combo aéreo · pesado = mergulho · esquiva = impulso no ar
+  function airAction(act, mv) {
+    if (act === 'attack' && canAttackNow()) {
+      const A = airMoves(P.set);
+      const cont = (P.state === 'attack' && P.atk && P.atk.aerial) || P.airWindow > 0;
+      if (cont && P.airIdx >= 2) return false; // depois da descida, só no próximo salto
+      const next = cont && P.airIdx >= 0 ? P.airIdx + 1 : 0;
+      startAttack(A[next], mv); P.airIdx = next;
+      return true;
+    }
+    if (act === 'heavy' && canAttackNow() && P.state !== 'dive') { startDive(mv); return true; }
+    if (act === 'dash' && P.airDashes > 0 && (P.state === 'jump' || (P.state === 'attack' && P.atk && P.atk.aerial && afterStrike(P.atk, WHIFF_LOCK)))) { startAirDash(mv); return true; }
+    return false;
+  }
+  function startAirDash(mv) {
+    let dx = mv.x, dy = mv.y;
+    if (mv.m < 0.2) { const L = P.lock && !P.lock.dead ? P.lock : null; const a = L ? Math.atan2(L.y - P.y, L.x - P.x) : P.face; dx = Math.cos(a); dy = Math.sin(a); }
+    const m = len(dx, dy) || 1;
+    P.dashX = dx / m; P.dashY = dy / m; P.face = Math.atan2(P.dashY, P.dashX);
+    P.state = 'airdash'; P.t = 0; P.actionId++; P.airDashes--; P.vz = 0; P.ghostT = 0; P.threat = null;
+    P.iframe = Math.max(P.iframe, 0.14);
+    Sound.play('dash'); heroVoice('jump', { chance: 0.3, gap: 0.5 });
+    styleAdd(8, 'impulso');
+  }
+  function startDive(mv) {
+    const aim = aimAssist(mv, 200);
+    P.state = 'dive'; P.t = 0; P.actionId++; P.threat = { id: ++threatId, kind: 'heavy', range: DIVE.radius, arc: TAU };
+    P.diveGo = false; P.diveHit = false; P.diveH = P.z; P.hitSet.clear();
+    P.diveE = aim.target; if (aim.target) P.face = aim.ang;
+    P.vz = 140; P.vx *= 0.2; P.vy *= 0.2;
+    addText(P.x, P.y - 34, 'RACHA-CÉU', '#ffb070', 14);
+    heroVoice('big', { chance: 0.9 });
+  }
+  function diveStep(dt) {
+    if (!P.diveHit) {
+      if (!P.diveGo && P.t >= 0.13) {
+        P.diveGo = true; P.vz = -DIVE.speed; Sound.play('swing');
+        const e = P.diveE && !P.diveE.dead ? P.diveE : null;
+        if (e) { // cai em cima do alvo
+          const tt = Math.max(0.05, P.z / DIVE.speed), a = Math.atan2(e.y - P.y, e.x - P.x);
+          const need = Math.max(0, len(e.x - P.x, e.y - P.y) - (P.r + e.r) * 0.6);
+          P.vx = Math.cos(a) * Math.min(900, need / tt); P.vy = Math.sin(a) * Math.min(900, need / tt);
+        }
+      }
+      if (!P.diveGo) { P.vx *= Math.exp(-8 * dt); P.vy *= Math.exp(-8 * dt); }
+      else {
+        P.ghostT -= dt;
+        if (P.ghostT <= 0) { P.ghostT = 0.02; G.ghosts.push({ x: P.x, y: P.y, z: P.z, r: P.r, face: P.face, life: 0.2, max: 0.2, color: '255,150,80' }); }
+        // quem estiver no caminho da descida vai junto para o chão
+        for (const e of G.enemies) {
+          if (!targetable(e) || e.state !== 'air' || P.hitSet.has(e)) continue;
+          if (len(e.x - P.x, e.y - P.y) < e.r + P.r + 26 && Math.abs(e.z - P.z) < 70) {
+            P.hitSet.add(e);
+            damageEnemy(e, playerDmg(DIVE.dmg * 0.5), Math.atan2(e.y - P.y, e.x - P.x), 80, 40, { stop: 0.03, slam: true, move: 'racha_ceu_ar' });
+          }
+        }
+      }
+    } else {
+      P.vx *= Math.exp(-12 * dt); P.vy *= Math.exp(-12 * dt);
+      if (P.t >= 0.34) { P.state = 'idle'; P.threat = null; }
+    }
+  }
+  function diveImpact() {
+    const h = P.diveH || 0, k = 1 + clamp(h / 260, 0, 1) * 0.6, R = DIVE.radius * (0.9 + clamp(h / 260, 0, 1) * 0.4);
+    P.diveHit = true; P.t = 0; P.actionId++;
+    for (const e of G.enemies) {
+      if (!targetable(e) || e.state === 'lurk' || P.hitSet.has(e)) continue;
+      const dx = e.x - P.x, dy = e.y - P.y, d = len(dx, dy);
+      if (d > R + e.r || (e.z || 0) > 90) continue;
+      P.hitSet.add(e);
+      damageEnemy(e, playerDmg(DIVE.dmg * k * (d < P.r + e.r + 30 ? 1.3 : 1)), Math.atan2(dy, dx), 460, DIVE.poise * P.mods.poise, { stop: 0.07, heavy: true, slam: true, knockdown: true, move: 'racha_ceu' });
+    }
+    hitProps(P.x, P.y, 0, R, TAU, DIVE.dmg * k, true, true);
+    shake(0.55); vibrate(35); Sound.play('slam'); Sound.play('boom');
+    fxq('dust', P.x, P.y, 110); fxq('sparks', P.x, P.y);
+    burst(P.x, P.y, 0, 26, '#c9b89a', 340, true);
+    G.rings.push({ x: P.x, y: P.y, r: 16, max: R + 20, t: 0, dur: 0.32, color: '255,170,90' });
+    G.rings.push({ x: P.x, y: P.y, r: 8, max: R * 0.6, t: 0, dur: 0.22, color: '255,235,200' });
+    if (typeof physPush === 'function') physPush(P.x, P.y, R + 40, 5);
+    styleAdd(14, 'racha_ceu');
+  }
+  // física do corpo do herói no ar
+  function airPhysics(dt) {
+    if (P.state === 'dead' || P.state === 'grabbed' || P.state === 'execute' || P.state === 'special') { P.air = false; P.vz = 0; return; }
+    P.hangT -= dt;
+    if (P.state !== 'airdash' && P.state !== 'pull') {
+      const hang = P.hangT > 0 && P.state !== 'dive' && P.vz < 80;
+      P.vz -= JUMP.g * (hang ? 0.1 : 1) * dt;
+      if (hang && P.vz < -50) P.vz = -50;
+    }
+    P.z += P.vz * dt;
+    if (P.z > 460) { P.z = 460; P.vz = Math.min(P.vz, 0); }
+    if (P.z <= 0 && P.vz <= 0) land();
+  }
+  function land() {
+    const vz = P.vz;
+    P.z = 0; P.vz = 0; P.air = false; P.hangT = 0; P.flip = 0;
+    if (P.state === 'dive') { diveImpact(); return; }
+    if (P.state === 'jump' || P.state === 'airdash' || P.state === 'pull' || (P.state === 'attack' && P.atk && P.atk.aerial)) {
+      if (P.state === 'attack') P.threat = null;
+      P.state = 'idle'; P.landT = vz < -700 ? 0.2 : 0.12; P.actionId++;
+      P.vx *= 0.55; P.vy *= 0.55;
+    }
+    Sound.play('step'); fxq('step', P.x, P.y);
+    if (vz < -700) fxq('dust', P.x, P.y, 40);
+  }
+  // ---------- Corrente: puxa o leve até você; o pesado puxa você até ele ----------
+  function pullTarget(mv) {
+    const L = P.lock && !P.lock.dead && targetable(P.lock) ? P.lock : null;
+    if (L && len(L.x - P.x, L.y - P.y) < PULL.range + L.r) return L;
+    const baseA = baseAim(mv);
+    let best = null, bs = Infinity;
+    for (const e of G.enemies) {
+      if (!targetable(e) || e.state === 'lurk' || e.state === 'spawn') continue;
+      const dx = e.x - P.x, dy = e.y - P.y, d = len(dx, dy);
+      if (d > PULL.range + e.r || d < P.r + e.r + 20) continue;
+      const ad = Math.abs(angDiff(baseA, Math.atan2(dy, dx)));
+      if (ad > 0.9) continue;
+      if (!hasLOS(P.x, P.y, e.x, e.y, 3)) continue;
+      const s = d + ad * 260;
+      if (s < bs) { bs = s; best = e; }
+    }
+    return best;
+  }
+  const heavyBody = (e) => e.boss || e.mini || e.isStatic || e.type === 'brute' || TYPES[e.type].mass >= 2.5;
+  function tryPull(mv) {
+    if ((P.pullCd || 0) > 0) return false;
+    const ok = P.state === 'idle' || P.state === 'jump' || P.state === 'guard' || (P.state === 'dash' && P.t >= dashT() * 0.4)
+      || (P.state === 'attack' && afterStrike(P.atk, WHIFF_LOCK)) || (P.state === 'airdash' && P.t >= 0.1);
+    if (!ok) return false;
+    const e = pullTarget(mv);
+    P.pullCd = PULL.cd;
+    P.state = 'pull'; P.t = 0; P.actionId++; P.threat = null; P.pullDone = false; P.pullZip = false;
+    const hx = P.x + Math.cos(P.face) * 18, hy = P.y + Math.sin(P.face) * 18;
+    if (!e) { // corrente no vazio
+      const a = baseAim(mv); P.face = a;
+      G.chains.push({ x0: hx, y0: hy, z0: P.z + 46, x1: P.x + Math.cos(a) * 280, y1: P.y + Math.sin(a) * 280, z1: P.z + 50, t: 0, dur: 0.3, from: P });
+      P.pullE = null; Sound.play('swing');
+      return true;
+    }
+    P.pullE = e; P.face = Math.atan2(e.y - P.y, e.x - P.x);
+    G.chains.push({ from: P, to: e, t: 0, dur: PULL.time + 0.08 });
+    Sound.play('clang', e.x, e.y); Sound.play('swing');
+    heroVoice('atk', { chance: 0.5, gap: 0.3 });
+    return true;
+  }
+  function pullStep(dt) {
+    const e = P.pullE;
+    if (!e || e.dead) {
+      P.vx *= Math.exp(-10 * dt); P.vy *= Math.exp(-10 * dt);
+      if (P.t >= 0.3) P.state = P.air ? 'jump' : 'idle';
+      return;
+    }
+    if (!P.pullDone && P.t >= 0.09) {
+      P.pullDone = true;
+      if (e.type === 'shield' && e.guardBrokenT <= 0) { e.guardBrokenT = 2.6; e.poise = 0; addText(e.x, e.y - e.r - 26, 'ESCUDO ARRANCADO', '#ffe27a', 14); }
+      if (heavyBody(e)) { // o herói vai até ele
+        P.pullZip = true; P.iframe = Math.max(P.iframe, PULL.time);
+        const d = len(e.x - P.x, e.y - P.y), need = Math.max(0, d - (P.r + e.r + 20));
+        P.vx = Math.cos(P.face) * need / PULL.time; P.vy = Math.sin(P.face) * need / PULL.time;
+        if ((e.z || 0) > 40) { P.air = true; P.vz = ((e.z || 0) - P.z) / PULL.time; }
+        addText(P.x, P.y - 36, 'ATRÁS DELE', '#ffcf8a', 13);
+        styleAdd(14, 'corrente_ir');
+      } else { // o inimigo vem até o herói, suspenso no ar à frente dele
+        const tx = P.x + Math.cos(P.face) * (P.r + e.r + 16), ty = P.y + Math.sin(P.face) * (P.r + e.r + 16);
+        const T = PULL.time;
+        e.vx = (tx - e.x) / T * 1.2; e.vy = (ty - e.y) / T * 1.2; // (o ar freia um pouco o corpo)
+        if (!e.fly) {
+          const tz = Math.max(P.z + 10, 40);
+          if (e.state !== 'air') { setState(e, 'air', 9); e.z = Math.max(e.z || 0, 4); e.token = false; e.slammed = false; }
+          e.vz = (tz - e.z) / T + 0.5 * GRAV * T; e.hangT = 0; e.pulledT = T;
+        } else { setState(e, 'stagger', 0.5); }
+        e.flinchT = FLINCH_TIME; e.flinchA = Math.atan2(P.y - e.y, P.x - e.x); e.flinchK = 1.2;
+        hitstop(0.03, e, P);
+        addText(e.x, e.y - e.r - 20, 'PUXADO', '#ffcf8a', 13);
+        styleAdd(16, 'corrente_puxa');
+      }
+    }
+    if (P.pullZip) {
+      if (P.t >= 0.09 + PULL.time || len(e.x - P.x, e.y - P.y) < P.r + e.r + 22) { P.pullZip = false; P.vx *= 0.15; P.vy *= 0.15; if (P.air) { P.vz = 120; P.hangT = 0.3; } }
+      P.ghostT -= dt;
+      if (P.ghostT <= 0) { P.ghostT = 0.025; G.ghosts.push({ x: P.x, y: P.y, z: P.z, r: P.r, face: P.face, life: 0.2, max: 0.2, color: '255,200,120' }); }
+    } else { P.vx *= Math.exp(-10 * dt); P.vy *= Math.exp(-10 * dt); }
+    if (P.t >= 0.09 + PULL.time + 0.06 && !P.pullZip) { P.state = P.air ? 'jump' : 'idle'; P.t = 0; P.actionId++; if (P.air) { P.airIdx = -1; P.airWindow = 0.4; } }
   }
   function startParry(mv) {
     let best = null, bd = 260;
@@ -1799,6 +2118,8 @@
     if (P.furyT > 0) P.furyT -= dt;
     if (P.lock && (P.lock.dead || len(P.lock.x - P.x, P.lock.y - P.y) > 760)) P.lock = null;
     P.iframe -= dt; P.dashCd -= dt; P.parryT -= dt; P.comboWindow -= dt; P.stDelay -= dt;
+    P.followT -= dt; P.airWindow -= dt; P.landT -= dt; P.pullCd -= dt; P.flipT += dt;
+    if (P.followT <= 0) P.followE = null;
     if (P.state === 'idle' && P.comboWindow > 0) P.comboPause += dt; else if (P.state !== 'idle') P.comboPause = 0;
     if (P.stDelay <= 0) P.st = Math.min(P.maxSt, P.st + (P.state === 'guard' ? 14 : 40) * dt);
     readDecay(dt);
@@ -1842,6 +2163,23 @@
         break;
       }
       case 'execute': executeStep(dt); break;
+      case 'jump': {
+        const ak = expK(5, dt);
+        P.vx += (mv.x * spd * JUMP.drift - P.vx) * ak; P.vy += (mv.y * spd * JUMP.drift - P.vy) * ak;
+        if (P.lock) turnTo(P, Math.atan2(P.lock.y - P.y, P.lock.x - P.x), 10, dt);
+        else if (mv.m > 0.1) turnTo(P, Math.atan2(mv.y, mv.x), 8, dt);
+        break;
+      }
+      case 'airdash': {
+        const k = P.t < 0.14 ? 1 : lerp(1, 0.3, clamp((P.t - 0.14) / 0.08, 0, 1));
+        P.vx = P.dashX * 760 * k; P.vy = P.dashY * 760 * k; P.vz = 0;
+        P.ghostT -= dt;
+        if (P.ghostT <= 0) { P.ghostT = 0.022; G.ghosts.push({ x: P.x, y: P.y, z: P.z, r: P.r, face: P.face, life: 0.22, max: 0.22, color: P.hero === 'ilan' ? '224,79,174' : '120,190,255' }); }
+        if (P.t >= 0.22) { P.state = 'jump'; P.t = 0.3; P.actionId++; P.vx *= 0.6; P.vy *= 0.6; P.vz = 60; }
+        break;
+      }
+      case 'dive': diveStep(dt); break;
+      case 'pull': pullStep(dt); break;
       case 'drink': {
         P.vx += (mv.x * spd * 0.3 - P.vx) * moveK;
         P.vy += (mv.y * spd * 0.3 - P.vy) * moveK;
@@ -1890,10 +2228,13 @@
           if (a.remote && P.atkTarget) remoteStrike(a, P.atkTarget);
         }
         if (!a.cast && !a.remote && P.t >= a.wind && P.t < aEnd) attackHits(a);
-        if (a.hop) P.z = Math.sin(clamp(P.t / (aEnd + 0.08), 0, 1) * Math.PI) * 40 * a.hop;
+        if (a.stinger && P.t >= a.wind * 0.5 && P.t < aEnd + 0.05) { P.ghostT -= dt; if (P.ghostT <= 0) { P.ghostT = 0.018; G.ghosts.push({ x: P.x, y: P.y, z: P.z, r: P.r, face: P.face, life: 0.28, max: 0.28, color: '255,90,60' }); } }
+        if (a.hop && !P.air) P.z = Math.sin(clamp(P.t / (aEnd + 0.08), 0, 1) * Math.PI) * 40 * a.hop;
         P.vx *= Math.exp(-9 * dt); P.vy *= Math.exp(-9 * dt);
         P.vx += mv.x * PL.speed * 1.2 * dt; P.vy += mv.y * PL.speed * 1.2 * dt;
-        if (P.t >= total) { P.state = 'idle'; P.threat = null; P.comboWindow = a === P.set.l4 || (a === P.set.l3 && !P.set.l4) ? 0 : 0.55; P.comboPause = 0; P.z = 0; if (P.atkKind !== 'combo') P.comboWindow = 0; }
+        if (P.followNext && P.t >= aEnd) { const fe = P.followNext; P.followNext = null; if (!fe.dead && fe.state === 'air') { followJump(fe); break; } }
+        if (P.t >= total && P.air) { P.state = 'jump'; P.t = 0.3; P.actionId++; P.threat = null; P.airWindow = 0.45; }
+        else if (P.t >= total) { P.state = 'idle'; P.threat = null; P.comboWindow = a === P.set.l4 || (a === P.set.l3 && !P.set.l4) ? 0 : 0.55; P.comboPause = 0; P.z = 0; if (P.atkKind !== 'combo') P.comboWindow = 0; }
         break;
       }
       case 'heavy': {
@@ -1985,11 +2326,12 @@
       }
       case 'hurt': {
         P.vx *= Math.exp(-7 * dt); P.vy *= Math.exp(-7 * dt);
-        if (P.t >= 0.26) P.state = 'idle';
+        if (P.t >= 0.26) P.state = P.air ? 'jump' : 'idle';
         break;
       }
     }
-    if (P.state !== 'special' && P.state !== 'attack') P.z = Math.max(0, P.z - 300 * dt);
+    if (P.air) { if (P.state === 'idle') P.state = 'jump'; airPhysics(dt); }
+    else if (P.state !== 'special' && P.state !== 'attack') P.z = Math.max(0, P.z - 300 * dt);
 
     P.x += P.vx * dt; P.y += P.vy * dt;
     collideWorld(P);
@@ -2146,9 +2488,18 @@
       const ang = Math.atan2(dy, dx);
       if (Math.abs(angDiff(P.face, ang)) > a.arc / 2 && d > e.r + P.r + 6) continue;
       if (a.range > 100 && !hasLOS(P.x, P.y, e.x, e.y, 0, true)) continue;
-      // golpe aéreo só pega quem está no ar (ou muito perto)
+      // golpe no ar só pega quem está na mesma altura
+      if (a.aerial && Math.abs((e.z || 0) - P.z) > (e.state === 'air' || e.fly ? 85 : 64 + (e.boss ? 40 : 0))) continue;
       P.hitSet.add(e);
-      if (damageEnemy(e, playerDmg(a.dmg), ang, a.kb, a.poise * P.mods.poise, { stop: a.stop, finisher: a.finisher, launch: a.launch, slam: a.slam, knockdown: a.knockdown, guardBreak: a.guardBreak, move: a.id, riposte: a.riposte })) P.confirm = true;
+      const lau = a.aerial ? (!a.airFinish && e.state !== 'air' ? 380 : 0) : a.launch;
+      if (damageEnemy(e, playerDmg(a.dmg), ang, a.kb, a.poise * P.mods.poise, { stop: a.stop, finisher: a.finisher, launch: lau, slam: a.slam, knockdown: a.knockdown || (a.airFinish && e.state !== 'air'), guardBreak: a.guardBreak, move: a.id, riposte: a.riposte, juggle: !!a.aerial, airFinish: !!a.airFinish })) {
+        P.confirm = true;
+        if (a.aerial && !a.airFinish) { P.hangT = Math.max(P.hangT, 0.34); P.vz = Math.max(P.vz, 20); }
+        if (a.launch && !a.aerial && e.state === 'air') { // lançou: saltar agora (ou segurar o pesado) vai atrás
+          P.followE = e; P.followT = 0.6;
+          if (Input.held.heavy || Input.held.jump) P.followNext = e;
+        }
+      }
       if (!a.pierce && a.arc < 1 && !a.riposte) break; // estocada simples: um alvo
     }
     for (const pr of G.projectiles) {
@@ -2183,6 +2534,7 @@
   function hurtPlayer(src, dmg, ang, kb, parryable, o) {
     o = o || {};
     if (P.state === 'dead' || G.state !== 'play') return 'none';
+    if (P.air && P.z > 64 && !o.proj && src && src.type) return 'dodge'; // saltou por cima do golpe
     const fromAng = Math.atan2(src.y - P.y, src.x - P.x);
     const front = Math.abs(angDiff(P.face, fromAng)) < 1.95;
     if (P.parryT > 0 && parryable && front) return 'parry';
@@ -2230,7 +2582,8 @@
     else {
       P.iframe = 0.55;
       if (P.grabbed) { const g = P.grabbed; P.grabbed = null; if (!g.dead) { setState(g, 'down', 0.5); g.z = 0; } }
-      P.state = 'hurt'; P.t = 0; P.threat = null; P.atk = null; P.spec = null; P.z = 0;
+      P.state = 'hurt'; P.t = 0; P.threat = null; P.atk = null; P.spec = null;
+      if (P.air) { P.vz = Math.min(P.vz, 100); P.hangT = 0; } else P.z = 0;
       P.vx = Math.cos(ang) * kb; P.vy = Math.sin(ang) * kb;
     }
     if (P.hp <= 0) playerDie();
@@ -2251,7 +2604,7 @@
     heroVoice('die', { prio: 3, gap: 0 });
     if (P.state === 'dead') return;
     if (P.grabbed) { P.grabbed = null; }
-    P.hp = 0; P.state = 'dead'; P.lock = null; P.z = 0;
+    P.hp = 0; P.state = 'dead'; P.lock = null; P.z = 0; P.air = false; P.vz = 0;
     slowmo(1.4, 0.25);
     G.overT = 1.6;
     burst(P.x, P.y, 0, 40, '#5ab0ff', 380, true);
@@ -2571,7 +2924,7 @@
           want(e, Math.cos(e.face) * 420, Math.sin(e.face) * 420, 20);
           if (!e.hitDone && d < e.r + P.r + 14 && Math.abs(angDiff(e.face, a)) < 1.1) {
             e.hitDone = true;
-            if (P.iframe > 0 || P.state === 'dead') { if (P.state === 'dash' && !P.dodged) perfectDodge(); }
+            if (P.iframe > 0 || P.state === 'dead' || (P.air && P.z > 50)) { if (P.state === 'dash' && !P.dodged) perfectDodge(); }
             else {
               P.state = 'grabbed'; P.t = 0; P.heldBy = e; P.actionId++; P.threat = null; P.atk = null; P.spec = null;
               setState(e, 'grabHold', 1.1 * (e.elite ? 1.2 : 1));
@@ -3303,7 +3656,11 @@
   function passiveStep(e, dt) {
     switch (e.state) {
       case 'air': {
-        e.vz -= GRAV * dt; e.z += e.vz * dt;
+        if (e.pulledT > 0) { e.pulledT -= dt; if (e.pulledT <= 0) { e.vx *= 0.1; e.vy *= 0.1; e.vz = 60; e.hangT = 0.6; } }
+        if (e.hangT > 0) e.hangT -= dt;
+        if (e.hangT > 0 && e.vz < 80) { e.vz -= GRAV * 0.12 * dt; if (e.vz < -70) e.vz = -70; } // suspenso pelos golpes (só depois de parar de subir)
+        else e.vz -= GRAV * dt;
+        e.z += e.vz * dt;
         e.vx *= Math.exp(-1.5 * dt); e.vy *= Math.exp(-1.5 * dt);
         if (e.z <= 0 && e.vz < 0) {
           e.z = 0; e.vz = 0;
@@ -3587,7 +3944,9 @@
     // corpo: lançar / cravar / derrubar
     const light = canLaunch(e);
     if (e.state === 'air') {
-      if (o.slam) { e.vz = -1100; e.slammed = true; styleAdd(30, 'cravar'); }
+      if (o.slam) { e.vz = -1100; e.slammed = true; e.hangT = 0; styleAdd(30, 'cravar'); }
+      else if (o.airFinish) { e.vz = -560; e.slammed = true; e.hangT = 0; }
+      else if (o.juggle) { e.vz = 50; e.hangT = 0.5; e.vx *= 0.35; e.vy *= 0.35; } // fica suspenso à frente do herói
       else if (fromP) e.vz = Math.max(e.vz, 330); // malabarismo: golpes no ar mantêm o corpo lá em cima
     } else if (o.launch && light && e.state !== 'grabbed' && e.state !== 'thrown') {
       setState(e, 'air', 9); e.vz = o.launch; e.z = Math.max(e.z, 4); e.token = false; e.slammed = false;
@@ -3618,7 +3977,7 @@
       if (!o.supreme) addRage(dmg * 0.32 * (P.mods.rageGain || 1));
       G.combo++; G.comboT = 2.4;
       G.bestCombo = Math.max(G.bestCombo, G.combo);
-      styleAdd(6 + dmg * 0.5 + (crit ? 8 : 0) + (e.state === 'air' ? 10 : 0), o.move);
+      styleAdd(6 + dmg * 0.5 + (crit ? 8 : 0) + (e.state === 'air' ? 10 : 0) + (P.air ? 6 : 0), o.move);
       vibrate(8);
     }
     if (e.hp <= 0) { if (o.env) e.envKill = true; killEnemy(e, ang); }
@@ -4515,6 +4874,8 @@
     if (!(P.freeze > 0)) for (const s of G.slashes) s.t += dt; // o rastro congela junto com o golpe
     sweep(G.slashes, (s) => s.t < s.dur + 0.12);
     for (const g of G.ghosts) g.life -= dt;
+    for (const c of G.chains) c.t += dt;
+    sweep(G.chains, (c) => c.t < c.dur);
     sweep(G.ghosts, liveP);
     for (const r of G.rings) r.t += dt;
     sweep(G.rings, (r) => r.t < r.dur);
@@ -5308,7 +5669,7 @@
   const ASSET_BASE = 'assets/';
   // Página autocontida: modelos (JSON) e texturas (data URI) podem vir embutidos em window.__ASSETS
   const EMBED = window.__ASSETS || null;
-  const BUILD = 'build 13 · física real e golpes variados';
+  const BUILD = 'build 14 · voo, combos aéreos e estilo SSS';
   const ANIM_FILE = 'h/anims_h.glb';
   // texturas fotográficas do cenário (m = metros cobertos por uma repetição) e rochas escaneadas
   const ENV_TEX = {
@@ -5396,6 +5757,11 @@
     Throw: { src: 'OverhandThrow', m: [0.02, 0.18, 0.27, 0.55] },
     Use_Item: { src: 'Consume', m: [0.04, 0.2, 0.34, 0.6] },
     Taunt: { src: 'Idle_Shield_Break' },
+    // salto
+    Jump_Up: { src: 'Jump_Start' },
+    Jump_Air: { src: 'Jump_Loop' },
+    Jump_Down: { src: 'Jump_Land' },
+    Jump_Kick: { src: 'NinjaJump_Start' },
     Cheer: { src: 'Idle_FoldArms_Loop' },
     // defesa, esquiva, dano
     Block: { src: 'Sword_Block', w: [0.0, 0.3] },
@@ -6099,6 +6465,18 @@
         scrub(v, v.dashClip, P.t, [0, dashT()], [0.0, 1.0], 0.05, v.alt);
         v.yawT = angDiff(P.face, Math.atan2(P.dashY, P.dashX));
         break;
+      case 'jump':
+        if (P.vz > 160 && P.t < 0.3) scrub(v, P.flip ? 'Jump_Kick' : 'Jump_Up', P.t, [0, 0.3], [0.25, 1], 0.05, v.alt);
+        else loopAnim(v, 'Jump_Air', 1, 0.12);
+        break;
+      case 'airdash': scrub(v, 'Sword_Lunge', P.t, [0, 0.22], [0.1, 0.55], 0.04, v.alt); break;
+      case 'dive': {
+        const c = set.air ? set.air.clip : '1H_Melee_Attack_Jump_Chop', M = markOf(c);
+        if (!P.diveHit) scrub(v, c, P.t, [0, 0.13, 0.4], [M[0], lerp(M[0], M[1], 0.7), M[1] - 0.02], 0.05, v.alt);
+        else scrub(v, c, P.t, [0, 0.05, 0.34], [M[1], M[2], M[3]], 0.02, v.alt);
+        break;
+      }
+      case 'pull': scrub(v, 'Throw', P.t, [0, 0.09, 0.4], [0.12, 0.3, 0.75], 0.04, v.alt); break;
       case 'parry': scrub(v, 'Block', P.t, [0, 0.08, PL.parryTime], [0.02, 0.25, 0.4], 0.04, v.alt); break;
       case 'guard': if (P.blockHitT > 0) scrub(v, 'Block_Hit', 0.2 - P.blockHitT, [0, 0.2], [0.05, 0.6], 0.03, v.alt); else loopAnim(v, 'Blocking', 1, 0.1); break;
       case 'stance': loopAnim(v, 'Blocking', 1.5, 0.1); break;
@@ -6112,7 +6490,9 @@
         if (!v.ragdoll && PHYS.ready && physRagdoll(v, P.flinchA || P.face + Math.PI, P.hitPow || 260, { x: P.vx * U, z: P.vy * U })) physDropGear(v, P.flinchA || 0, 3);
         if (!v.ragdoll) onceAnim(v, 'Death_A', 1, 0.1);
         break;
-      default: locomotion(v, P.vx, P.vy, P.face, Wd.idle);
+      default:
+        if (P.landT > 0) scrub(v, 'Jump_Down', 0.2 - P.landT, [0, 0.2], [0.05, 0.7], 0.04, v.alt);
+        else locomotion(v, P.vx, P.vy, P.face, Wd.idle);
     }
     if (v.ragdoll) { // morto: o corpo é da física
       if (!v.ragdoll.freed) { physApplyRagdoll(v); if (P.deadT === undefined) P.deadT = 0; }
@@ -6133,6 +6513,10 @@
     }
     applyFlinch(v, P, P.face);
     if (P.state !== 'dash') leanLayer(v, P.vx, P.vy, P.face, dt);
+    if (P.air && P.flip && P.state === 'jump') { // cambalhota do salto duplo / passo no inimigo, girando pelo quadril
+      const a = TAU * easeOut(clamp(P.flipT / 0.42, 0, 1)), hc = 0.95;
+      if (a < TAU - 0.01) { v.tilt.rotation.x += a; v.tilt.position.y += hc * (1 - Math.cos(a)); v.tilt.position.z -= hc * Math.sin(a); }
+    }
     tint(v, P.state === 'stance' ? 'parry' : P.parryT > 0 ? 'parry' : P.state === 'charge' && P.chargeLv > 1 ? 'charge' + P.chargeLv
       : P.state === 'special' && P.spec && P.spec.def.supreme ? 'supreme' : P.furyT > 0 ? 'fury'
       : (P.iframe > 0 && P.state === 'hurt' && Math.floor(G.time * 20) % 2 === 0 ? 'flash' : 'none'));
@@ -7037,6 +7421,31 @@
       new THREE.MeshBasicMaterial({ color: '#5ab0ff', transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false }));
     return m;
   });
+  // corrente (puxar): elos de ferro em brasa entre a mão e o alvo
+  const CHAIN_MAX = 240;
+  const chainMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.05, 0.05, 0.1),
+    new THREE.MeshStandardMaterial({ color: '#b9b2a6', metalness: 0.9, roughness: 0.35, emissive: '#ff6a1a', emissiveIntensity: 0.9 }), CHAIN_MAX);
+  chainMesh.frustumCulled = false; chainMesh.count = 0; scene.add(chainMesh);
+  const _cd = new THREE.Object3D(), _ca = new THREE.Vector3(), _cb = new THREE.Vector3();
+  function drawChains() {
+    let n = 0;
+    for (const c of G.chains) {
+      const f = c.from || P;
+      _ca.set((f.x + Math.cos(f.face) * 14) * U, ((f.z || 0) + 46) * U, (f.y + Math.sin(f.face) * 14) * U);
+      if (c.to) _cb.set(c.to.x * U, ((c.to.z || 0) + (c.to.fly ? 10 : 44)) * U, c.to.y * U); else _cb.set(c.x1 * U, c.z1 * U, c.y1 * U);
+      const p = c.t / c.dur, ext = p < 0.3 ? easeOut(p / 0.3) : p > 0.8 ? 1 - (p - 0.8) / 0.2 : 1;
+      const L = _ca.distanceTo(_cb) * ext, k = Math.min(CHAIN_MAX - n, Math.ceil(L / 0.085));
+      if (L < 0.01) continue;
+      for (let i = 0; i < k; i++) {
+        const q = (i + 0.5) / k * ext, sag = Math.sin(q / Math.max(ext, 0.01) * Math.PI) * 0.12 * (1 - ext * 0.8);
+        _cd.position.lerpVectors(_ca, _cb, q); _cd.position.y -= sag;
+        _cd.lookAt(_cb); _cd.rotateZ(i % 2 ? HPI : 0); _cd.updateMatrix();
+        chainMesh.setMatrixAt(n++, _cd.matrix);
+      }
+      if (n >= CHAIN_MAX) break;
+    }
+    chainMesh.count = n; chainMesh.instanceMatrix.needsUpdate = true;
+  }
   const ringPool = pool(() => new THREE.Mesh(geo('fxRing', () => new THREE.RingGeometry(0.75, 1, 48).rotateX(-Math.PI / 2)),
     new THREE.MeshBasicMaterial({ color: '#fff', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })));
   const orbPool = pool(() => {
@@ -7291,7 +7700,7 @@
   // =========================================================================
   const GUTTER = 5; // corredor entre a cerca da arena e as muralhas
   const WALL_SY = 1.3; // muralhas um pouco mais altas que a peça original
-  let camDistCur = CAMERA.dist;
+  let camDistCur = CAMERA.dist, camLift = 0;
 
   // Governador de desempenho: mede o FPS real e ajusta resolução → sombras/luzes para ficar ≥ 40 FPS.
   const PERF = {
@@ -7339,7 +7748,8 @@
     const yaw = CAMERA.yaw, pitch = CAMERA.pitch;
     const fx = Math.cos(yaw), fz = Math.sin(yaw);
     const rx = -fz, rz = fx;
-    const oy = 1.55, ox = tx + rx * 0.55, oz = tz + rz * 0.55;
+    camLift += (P.z * U * 0.7 - camLift) * expK(P.z * U * 0.7 > camLift ? 5 : 3, rdt); // acompanha o herói no ar
+    const oy = 1.55 + camLift, ox = tx + rx * 0.55, oz = tz + rz * 0.55;
     const cp = Math.cos(pitch), bx = -fx * cp, by = Math.sin(pitch), bz = -fz * cp;
     let d = CAMERA.dist;
     const limX = OUT_W / 2 - 0.9, limZ = OUT_H / 2 - 0.9;
@@ -7362,7 +7772,7 @@
         const sl = (o, dd, a, b) => { if (Math.abs(dd) < 1e-6) return o >= a && o <= b; let ta = (a - o) / dd, tb = (b - o) / dd; if (ta > tb) { const q = ta; ta = tb; tb = q; } t0 = Math.max(t0, ta); t1 = Math.min(t1, tb); return t0 <= t1; };
         if (sl(ox, ux, x0, x1) && sl(oz, uz, z0, z1)) t = t0 / hl;
       }
-      if (t > 0 && t < Infinity && oy + by * t < 4.2) d = Math.min(d, t - 0.25);
+      if (t > 0 && t < Infinity && oy + by * t < 4.2 + camLift) d = Math.min(d, t - 0.25);
     }
     d = Math.max(d, 1.1);
     camDistCur += (d - camDistCur) * expK(d < camDistCur ? 30 : 4, rdt); // aproxima rápido, afasta suave
@@ -8607,12 +9017,13 @@
     ghostPool.begin();
     for (const g of G.ghosts) {
       const m = ghostPool.next();
-      m.position.set(g.x * U, 0.8 * g.r / 15, g.y * U);
+      m.position.set(g.x * U, (g.z || 0) * U + 0.8 * g.r / 15, g.y * U);
       m.scale.setScalar(g.r / 15);
       m.material.color.set(`rgb(${g.color})`);
       m.material.opacity = (g.life / g.max) * 0.3;
     }
     ghostPool.end();
+    drawChains();
     ringPool.begin();
     for (const r of G.rings) {
       const m = ringPool.next(), p = r.t / r.dur, rr = lerp(r.r, r.max, easeOut(p)) * U;
@@ -8825,13 +9236,19 @@
       const r = STYLE.rank, R = STYLE_RANKS[r], nx = STYLE_RANKS[r + 1];
       const y0 = pad + 104;
       ctx.textAlign = 'right';
-      ctx.font = `900 ${r >= 5 ? 20 : 30}px system-ui, sans-serif`;
-      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-      ctx.strokeText(R.name, W - rightPad, y0); ctx.fillStyle = R.color; ctx.fillText(R.name, W - rightPad, y0);
+      const pop = STYLE.flash > 0 ? 1 + STYLE.flash * 0.6 : 1;
+      ctx.save(); ctx.translate(W - rightPad, y0); ctx.scale(pop, pop);
+      ctx.font = `italic 900 ${r >= 5 ? 34 : 32}px system-ui, sans-serif`;
+      ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      if (r >= 5) { ctx.shadowColor = R.color; ctx.shadowBlur = 14; }
+      ctx.strokeText(R.name, 0, 0); ctx.fillStyle = R.color; ctx.fillText(R.name, 0, 0);
+      ctx.restore();
+      ctx.font = 'italic 900 12px system-ui, sans-serif'; ctx.fillStyle = R.color;
+      if (STYLE.pts > 12) ctx.fillText(R.word, W - rightPad, y0 + 16);
       const f = nx ? clamp((STYLE.pts - R.at) / (nx.at - R.at), 0, 1) : 1;
-      bar(W - rightPad - 90, y0 + 6, 90, 4, f, R.color, 'rgba(255,255,255,0.12)');
+      bar(W - rightPad - 90, y0 + 22, 90, 4, f, R.color, 'rgba(255,255,255,0.12)');
       ctx.font = '700 10px system-ui, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.55)';
-      ctx.fillText('ESTILO' + (R.mult > 1 ? ' · pontos x' + R.mult : ''), W - rightPad, y0 + 20);
+      ctx.fillText('ESTILO' + (R.mult > 1 ? ' · pontos x' + R.mult : ''), W - rightPad, y0 + 36);
     }
     if (G.brechaT > 0) { ctx.textAlign = 'center'; ctx.font = '900 16px system-ui, sans-serif'; ctx.fillStyle = '#b8dcff'; ctx.fillText('BRECHA', W / 2, H * 0.22); }
     if (G.banner.t > 0) {
@@ -8927,7 +9344,7 @@
     Object.assign(G, {
       state: 'play', mode, time: 0, wave: 0, score: 0, kills: 0, parries: 0, bestCombo: 0, execs: 0, dmgTaken: 0,
       combo: 0, comboT: 0, slowT: 0, slowScale: 1, trauma: 0, hurtFlash: 0, noHit: true, bossDeadT: 0,
-      enemies: [], projectiles: [], particles: [], texts: [], orbs: [], slashes: [], ghosts: [], rings: [], lobs: [],
+      enemies: [], projectiles: [], particles: [], texts: [], orbs: [], slashes: [], ghosts: [], chains: [], rings: [], lobs: [],
       spawnQueue: [], spawnT: 0, waveDelay: 0, dirT: 0, overT: -1, run: { embers: [] }, codexSeen: G.codexSeen || {},
       banner: { text: '', sub: '', t: 0 },
       corpses: [], blades: [], cinzas: 0, brechaT: 0, worldRev: 0, fxq: [],
@@ -9070,7 +9487,7 @@
       `<ul><li>Tempo <b>${mm}:${ss}</b></li><li>Dano recebido <b>${Math.round(G.dmgTaken)}</b></li>` +
       `<li>Maior combo <b>${G.bestCombo}</b></li><li>Execuções <b>${G.execs}</b></li><li>Aparos <b>${G.parries}</b></li>` +
       `<li>Relíquias <b>${P.relics.length}</b></li><li>Brasas neste capítulo <b>${G.embers.filter((b) => b.taken).length}/${G.embers.length}</b></li>` +
-      `<li>Estilo máximo <b>${STYLE_RANKS[STYLE.peak].name}</b></li><li>Cinzas ganhas <b>+${G.cinzasGot || 0}</b> (total ${SAVE.cinzas})</li></ul>` +
+      `<li>Estilo máximo <b>${STYLE_RANKS[STYLE.peak].name} · ${STYLE_RANKS[STYLE.peak].word}</b></li><li>Cinzas ganhas <b>+${G.cinzasGot || 0}</b> (total ${SAVE.cinzas})</li></ul>` +
       (G.newHero ? `<p class="newhero">NOVO COMPANHEIRO: <b>${HEROES[G.newHero].name}</b>, ${HEROES[G.newHero].title}. Escolha na Figueira.</p>` : '');
     $('resNext').textContent = i + 1 < CHAPTERS.length ? 'PRÓXIMO: ' + CHAPTERS[i + 1].name.toUpperCase() : 'CONTINUAR';
     show('result');
@@ -9345,7 +9762,7 @@
     PHYS, physRagdoll, physStep,
     physInfo: () => ({ ready: PHYS.ready, bodies: PHYS.bodies.length, kinds: PHYS.bodies.map((r) => r.kind).join(','), ragdolls: PHYS.ragdolls.map((rd) => rd.parts.map((p) => { const t = p.b.translation(); return p.name + ':' + t.x.toFixed(2) + ',' + t.y.toFixed(2) + ',' + t.z.toFixed(2); }).filter((_, i) => [0, 2, 8].includes(i)).join(' ')), statics: PHYS.statics.length, chars: PHYS.chars.size }), startChapter, startTrial, makeEnemy, step, STEP, cineAdvance, triggerEncounter, chooseRelic, openRelicChoice,
     zoom: (d) => { CAMERA.dist = d; }, CAMERA, PERF: () => PERF, toggleLock, OBST: () => OBST, HAZ: () => HAZ, COVER: () => COVER, freeSpot, hasLOS, findPath, inObstacle, inLava, TYPES,
-    HEROES, WEAPONS, SPECIALS, READ, STYLE, CAMFX, resetPlayer, tryAction, startSpecial, damageEnemy, openFigueira, heroOpen, views: () => views, playerView: () => playerView,
+    HEROES, WEAPONS, SPECIALS, READ, STYLE, STYLE_R: () => STYLE_RANKS[STYLE.rank].name + ":" + Math.round(STYLE.pts), Input, JUMP, CAMFX, resetPlayer, tryAction, startSpecial, damageEnemy, openFigueira, heroOpen, views: () => views, playerView: () => playerView,
     setHero: (h, w) => { SAVE.hero = h; if (w) SAVE.weaponOf[h] = w; },
     hold: (on) => { DEBUG_HOLD.on = on; }, audio: () => ({ sfx: Sound.stats(), music: Music.current, m: Music.stats() }), env: () => ({ hdr: scene.environment !== BASE_ENV, keys: Object.keys(envCache).map((k) => k + ':' + (envCache[k] === 'loading' ? 'loading' : envCache[k] ? 'ok' : 'fail')), fx: Object.keys(FXS).map((k) => k + ':' + FXS[k].list.length + (FXS[k].tex.ok ? '' : '!')).join(' ') }), renderNow: (dt) => render(1, dt || 1 / 60), CAMFX,
     info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, progs: renderer.info.programs.length }),

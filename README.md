@@ -199,3 +199,18 @@ node standalone.mjs desktop && cd desktop-lite && node build.mjs && npx @neutral
 - **Rastro da lâmina real:** o brilho do corte agora é uma fita presa à ponta e à base da arma, então acompanha o ângulo verdadeiro de cada golpe.
 - **Lutas menores:** cada encontro tem no máximo quatro inimigos no começo e um reforço depois. No máximo dois atacam ao mesmo tempo (os outros rodeiam). O sino e as colmeias levantam no máximo dois por vez, e as ondas da Provação ficaram menores.
 
+
+### Build 14: voo, combos aéreos e estilo até SSS
+
+Movimentos estudados num vídeo de combos de ação, usado só como referência de ritmo e estilo. Nenhum arquivo do vídeo foi usado.
+
+- **Salto** (`Espaço`/`I`, botão SALTO no celular). No ar, saltar de novo dá um **salto duplo** com cambalhota. O herói passa por cima de cobertura baixa, de lava e dos golpes corpo a corpo.
+- **Perseguição:** depois de lançar um inimigo (leve + pesado), saltar logo em seguida leva o herói até a altura dele e colado nele. Continuar segurando o pesado faz a mesma coisa.
+- **Rajada no ar:** três golpes aéreos. Enquanto o herói bate, os dois quase param de cair, e o terceiro golpe (**Descida**) joga o inimigo no chão. Os feitiços de Aurel também seguram quem está no ar.
+- **Racha-Céu:** pesado no ar é um mergulho que cai em cima do alvo. Crava no chão quem estiver no caminho e derruba todos em volta. Quanto mais alto o salto, maior o impacto.
+- **Impulso no ar:** esquiva no ar, uma vez por salto.
+- **Passo no inimigo:** saltar colado num inimigo usa ele de apoio e recarrega o salto e o impulso.
+- **Corrente** (`U`/`O`, botão CORRENTE): puxa o inimigo leve e o deixa suspenso à sua frente, pronto para a rajada. Nos pesados (Rompe-Muralha, chefes, Bombarda), puxa o herói até eles. No Escudeiro, arranca o escudo.
+- **Estocada relâmpago:** esquiva e pesado logo depois atravessam a sala até o alvo.
+- **Estilo em sete níveis:** D Desperta, C Certeira, B Brava, A Ardente, S Selvagem, SS Sanguinária e SSS Suprema Brasa. O nível pulsa quando sobe. Golpes no ar e combinações variadas rendem mais.
+- A câmera sobe junto com o herói no ar.

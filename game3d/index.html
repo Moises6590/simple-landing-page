@@ -21,7 +21,9 @@
     <button class="tbtn big" data-act="attack"><span>⚔</span><small>ATAQUE</small></button>
     <button class="tbtn" data-act="heavy"><span>✹</span><small>PESADO</small></button>
     <button class="tbtn" data-act="dash"><span>»</span><small>ESQUIVA</small></button>
+    <button class="tbtn" data-act="jump"><span>⤒</span><small>SALTO</small></button>
     <button class="tbtn" data-act="parry"><span>◈</span><small>APARAR</small></button>
+    <button class="tbtn small" data-act="pull"><span>⛓</span><small>CORRENTE</small></button>
     <button class="tbtn small" data-act="lock"><span>◎</span><small>ALVO</small></button>
     <button class="tbtn small" data-act="rage"><span>✺</span><small>ARTE</small></button>
     <button class="tbtn small" data-act="heal"><span>◆</span><small>SEIVA</small></button>
@@ -128,7 +130,9 @@
           <ul>
             <li><kbd>WASD</kbd> mover · <kbd>Mouse</kbd> gira a câmera (clique para capturar)</li>
             <li><kbd>Clique</kbd>/<kbd>J</kbd> ataque · <kbd>Botão dir.</kbd>/<kbd>K</kbd> pesado (<b>segure</b> para carregar)</li>
-            <li><kbd>Espaço</kbd> esquiva longa · atacar logo depois = <b>investida</b></li>
+            <li><kbd>Espaço</kbd>/<kbd>I</kbd> <b>salto</b> (de novo no ar = salto duplo; colado num inimigo = <b>passo no inimigo</b>)</li>
+            <li><kbd>Shift</kbd> esquiva longa · atacar logo depois = <b>investida</b> · pesado logo depois = <b>estocada relâmpago</b></li>
+            <li><kbd>U</kbd>/<kbd>O</kbd> <b>corrente</b>: puxa o inimigo leve até você; no pesado, puxa você até ele</li>
             <li><kbd>E</kbd>/<kbd>L</kbd> <b>toque</b> para aparar · <b>segure</b> para bloquear</li>
             <li><kbd>Q</kbd> e <kbd>F</kbd> especiais · <kbd>R</kbd> Arte do Juramento (Fúria cheia)</li>
             <li><kbd>G</kbd> bomba · <kbd>H</kbd> Seiva · <kbd>Tab</kbd>/<kbd>T</kbd>/botão do meio: travar alvo</li>
@@ -141,6 +145,7 @@
             <li>Metade esquerda: joystick</li>
             <li>Metade direita: arraste para girar a câmera</li>
             <li>Segure PESADO para carregar; ALVO trava a mira</li>
+            <li>SALTO sobe; no ar, ATAQUE faz o combo aéreo, PESADO mergulha e ESQUIVA dá impulso</li>
             <li>SEIVA cura; FÚRIA acende com a barra vermelha cheia</li>
           </ul>
         </div>
@@ -150,6 +155,13 @@
         leve + pesado = <b>lançar</b> · leve, leve + pesado = <b>quebra-guarda</b> · leve, leve, leve + pesado = <b>estocada</b> ·
         ataque num inimigo no ar = golpe aéreo que o crava no chão · aparar e atacar logo = <b>Resposta</b> ·
         esquivar no último instante abre a <b>BRECHA</b> (inimigos lentos). Execute atordoados perto de paredes ou lava.
+      </div>
+      <div class="tips">
+        <b>No ar:</b> leve + pesado lança o inimigo — <b>salte logo depois</b> (ou continue segurando o pesado) para ir atrás dele ·
+        no ar, ataque, ataque, ataque = <b>rajada</b> (os dois ficam suspensos; o 3º golpe joga ele no chão) ·
+        pesado no ar = <b>Racha-Céu</b> (mergulho que crava todos no chão) · esquiva no ar = <b>impulso</b> ·
+        salto colado num inimigo = <b>passo no inimigo</b> (recarrega salto e impulso) · a <b>corrente</b> traz o inimigo leve suspenso à sua frente ·
+        variar os golpes sobe o estilo até <b>SSS</b>; repetir o mesmo golpe e apanhar derrubam.
       </div>
       <div class="tips">
         <b>Dicas:</b> aparar no instante do golpe atordoa — ataque o atordoado para uma <b>execução</b> ·

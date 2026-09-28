@@ -194,10 +194,14 @@ body.playing #pauseBtn { display: block; }
 .tbtn[data-act="attack"] { right: calc(22px + env(safe-area-inset-right)); bottom: calc(24px + env(safe-area-inset-bottom)); }
 .tbtn[data-act="heavy"]  { right: calc(128px + env(safe-area-inset-right)); bottom: calc(16px + env(safe-area-inset-bottom)); }
 .tbtn[data-act="dash"]   { right: calc(116px + env(safe-area-inset-right)); bottom: calc(100px + env(safe-area-inset-bottom)); }
-.tbtn[data-act="parry"]  { right: calc(34px + env(safe-area-inset-right)); bottom: calc(130px + env(safe-area-inset-bottom)); }
+.tbtn[data-act="jump"]   { right: calc(28px + env(safe-area-inset-right)); bottom: calc(126px + env(safe-area-inset-bottom)); }
+.tbtn[data-act="jump"] span { color: #b8e0ff; }
+.tbtn[data-act="parry"]  { right: calc(102px + env(safe-area-inset-right)); bottom: calc(178px + env(safe-area-inset-bottom)); }
+.tbtn[data-act="pull"]   { right: calc(200px + env(safe-area-inset-right)); bottom: calc(96px + env(safe-area-inset-bottom)); }
+.tbtn[data-act="pull"] span { color: #ffb070; }
 .tbtn.small { width: 52px; height: 52px; }
 .tbtn.small span { font-size: 1.2rem; }
-.tbtn[data-act="lock"]   { right: calc(44px + env(safe-area-inset-right)); bottom: calc(210px + env(safe-area-inset-bottom)); }
+.tbtn[data-act="lock"]   { right: calc(34px + env(safe-area-inset-right)); bottom: calc(206px + env(safe-area-inset-bottom)); }
 .tbtn[data-act="rage"]   { right: calc(210px + env(safe-area-inset-right)); bottom: calc(22px + env(safe-area-inset-bottom)); }
 .tbtn.on { background: rgba(255, 207, 74, 0.35); border-color: #ffcf4a; }
 .tbtn.ready { background: rgba(255, 90, 60, 0.55); border-color: #ff5a3c; box-shadow: 0 0 18px rgba(255, 90, 60, 0.7); }
@@ -290,8 +294,8 @@ body:not(.playing) #objective, body.cine #objective { opacity: 0; }
 .tbtn[data-act="heal"] span { color: #6ef08a; }
 
 /* ---------- build 7: especiais, bomba, Figueira ---------- */
-.tbtn[data-act="sp1"]  { right: calc(196px + env(safe-area-inset-right)); bottom: calc(108px + env(safe-area-inset-bottom)); }
-.tbtn[data-act="sp2"]  { right: calc(130px + env(safe-area-inset-right)); bottom: calc(184px + env(safe-area-inset-bottom)); }
+.tbtn[data-act="sp1"]  { right: calc(182px + env(safe-area-inset-right)); bottom: calc(168px + env(safe-area-inset-bottom)); }
+.tbtn[data-act="sp2"]  { right: calc(262px + env(safe-area-inset-right)); bottom: calc(132px + env(safe-area-inset-bottom)); }
 .tbtn[data-act="bomb"] { right: calc(370px + env(safe-area-inset-right)); bottom: calc(22px + env(safe-area-inset-bottom)); }
 .tbtn[data-act="bomb"] span { color: #ffb03c; }
 .tbtn[data-act="sp1"] span, .tbtn[data-act="sp2"] span { color: #ffcf8a; }
