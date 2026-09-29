@@ -227,3 +227,19 @@ Revisão quadro a quadro do vídeo de referência (3 quadros por segundo). O que
 - **Faíscas em estrela** a cada golpe: azuis no Anjo, laranja no Demônio, douradas no crítico. O lançador deixa um **pilar de fogo** vertical.
 - **Medidor de estilo** mais rápido, como no vídeo (SSS em uns 15 s de combo variado). Mostra "PALAVRA! x combo", e ao chegar em S, SS e SSS a letra entra grande no meio da tela.
 - Teclas mudaram: `C` e `V` agora são os modos (aparar continua em `L`/`E` e Seiva em `H`/`3`), e `X` é tiro (pesado continua em `K` e no botão direito do mouse).
+
+### Build 16: Arena do Vídeo (modo de teste com tudo do vídeo)
+
+- **ARENA DO VÍDEO · TESTE DE COMBOS** no menu principal:
+  - Hordas de 8 a 11 inimigos leves chegando sem parar (até 3 atacam juntos), como no vídeo.
+  - A vida e a fúria voltam sozinhas, e o herói não morre, para testar à vontade.
+  - A lista de golpes fica na tela (`M` mostra ou esconde).
+- **Gatilho** (Anjo + Demônio juntos, ou `B`; custa meia Fúria): o herói se transforma por 10 segundos.
+  - Clarão branco e aura vermelha.
+  - Todos os inimigos em volta sobem e ficam flutuando.
+  - Dano ×1,5, velocidade ×1,2 e a vida volta aos poucos.
+- **Disco** (Anjo + tiro): uma lâmina que vai até o alvo, gira no lugar cortando e puxando todo mundo para o centro, e volta.
+- **Escopeta** (Demônio + tiro): rajada de fogo em leque, curta, que empurra e tem coice.
+- **Tremor carregado** (Demônio + segurar pesado): carrega até 2× o dano e aumenta a área da rachadura.
+- **Pernas no ar:** os joelhos dobram durante saltos, golpes aéreos, impulso e corrente. Os golpes de chão viram golpes aéreos de verdade.
+- **Correção:** as camadas por código (cabeça, tronco, reação ao golpe, pernas) acumulavam rotação durante o hit-stop e podiam torcer o corpo. Agora a pose do clipe é restaurada a cada quadro.

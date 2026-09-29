@@ -42,6 +42,16 @@
   <div id="cineHint">Toque, clique ou Enter para avançar</div>
   <div id="chapterCard"><small></small><b></b></div>
   <div id="objective"></div>
+  <div id="moves" onclick="this.classList.add('hide')">
+    <b>ARENA DO VÍDEO</b> <i>(M esconde)</i>
+    <p><u>Chão</u> J J J J combo · J J K <b>lançar</b> → Espaço <b>perseguir</b> · Shift + K <b>estocada relâmpago</b></p>
+    <p><u>Ar</u> J J J <b>rajada</b> · K <b>racha-céu</b> · Shift <b>impulso</b> · Espaço colado <b>passo no inimigo</b> · Espaço de novo <b>salto duplo</b></p>
+    <p><u>Anjo (segure C)</u> J <b>foice giratória</b> · K <b>redemoinho</b> · X <b>disco</b> · U <b>voa até o inimigo</b></p>
+    <p><u>Demônio (segure V)</u> J <b>machado de fogo</b> · K segurado <b>tremor carregado</b> · X <b>escopeta</b> · U <b>puxa o inimigo</b> · no ar J <b>queda de fogo</b></p>
+    <p><u>Tiro</u> X segurado <b>rajada</b> (segura no ar) · <u>Gatilho</u> C + V juntos ou B (meia fúria)</p>
+    <p>Troque Anjo ↔ Demônio no meio do combo: variar sobe o estilo até <b>SSS</b>.</p>
+    <p class="touchOnly"><u>No celular</u> J = ATAQUE · K = PESADO · Espaço = SALTO · Shift = ESQUIVA · C = ANJO · V = DEMÔNIO · X = TIRO · U = CORRENTE · toque aqui para fechar</p>
+  </div>
   <div id="hint"></div>
 
   <div id="menu" class="overlay show">
@@ -54,6 +64,7 @@
         <button data-go="figueira">A FIGUEIRA · HERÓIS E ARMAS</button>
         <button data-go="chapters">CAPÍTULOS</button>
         <button data-go="trial">PROVAÇÃO DAS CINZAS</button>
+        <button data-go="arena">ARENA DO VÍDEO · TESTE DE COMBOS</button>
         <button data-go="codex">CÓDICE</button>
         <button data-go="options">OPÇÕES</button>
         <button data-go="controls">CONTROLES</button>
@@ -136,7 +147,8 @@
             <li><kbd>Espaço</kbd>/<kbd>I</kbd> <b>salto</b> (de novo no ar = salto duplo; colado num inimigo = <b>passo no inimigo</b>)</li>
             <li><kbd>Shift</kbd> esquiva longa · atacar logo depois = <b>investida</b> · pesado logo depois = <b>estocada relâmpago</b></li>
             <li>Segure <kbd>C</kbd> = modo <b>Anjo</b> (foice: giros azuis, vários acertos, puxa para perto) · segure <kbd>V</kbd> = modo <b>Demônio</b> (machado de fogo: lento, explode, racha o chão) · troque no meio do combo</li>
-            <li><kbd>X</kbd> <b>tiro</b> (segure para rajada; no ar, segura o inimigo suspenso)</li>
+            <li><kbd>X</kbd> <b>tiro</b> (segure para rajada; no ar, segura o inimigo suspenso) · no Anjo vira <b>disco</b>, no Demônio vira <b>escopeta</b></li>
+            <li><kbd>B</kbd> ou <kbd>C</kbd>+<kbd>V</kbd> juntos = <b>Gatilho</b> (meia Fúria: inimigos flutuam, dano e velocidade sobem) · Demônio + segurar <kbd>K</kbd> = <b>tremor carregado</b></li>
             <li><kbd>U</kbd>/<kbd>O</kbd> <b>corrente</b>: puxa o inimigo leve até você; no pesado, puxa você até ele</li>
             <li><kbd>E</kbd>/<kbd>L</kbd> <b>toque</b> para aparar · <b>segure</b> para bloquear</li>
             <li><kbd>Q</kbd> e <kbd>F</kbd> especiais · <kbd>R</kbd> Arte do Juramento (Fúria cheia)</li>
@@ -151,6 +163,7 @@
             <li>Metade direita: arraste para girar a câmera</li>
             <li>Segure PESADO para carregar; ALVO trava a mira</li>
             <li>Segure ANJO ou DEMÔNIO enquanto ataca para trocar de arma; segure TIRO para disparar</li>
+            <li>ANJO + DEMÔNIO juntos = GATILHO · a ARENA DO VÍDEO no menu tem hordas sem parar para testar tudo</li>
             <li>SALTO sobe; no ar, ATAQUE faz o combo aéreo, PESADO mergulha e ESQUIVA dá impulso</li>
             <li>SEIVA cura; FÚRIA acende com a barra vermelha cheia</li>
           </ul>

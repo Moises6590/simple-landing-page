@@ -335,3 +335,14 @@ body:not(.playing) #objective, body.cine #objective { opacity: 0; }
 #hint b { color: #ffcf8a; }
 body.cine #hint { opacity: 0 !important; }
 .newhero { margin-top: 10px; color: #ffcf8a; }
+
+/* Arena do vídeo: lista de golpes */
+#moves { display: none; position: fixed; left: calc(10px + env(safe-area-inset-left)); top: 150px; z-index: 6; max-width: 360px; padding: 10px 12px; border-radius: 10px;
+  background: rgba(10, 12, 18, 0.72); border: 1px solid rgba(255, 255, 255, 0.12); color: #dfe4ee; font: 600 11px/1.45 system-ui, sans-serif; pointer-events: auto; }
+#moves b { color: #ffcf8a; } #moves i { opacity: 0.6; font-style: normal; } #moves u { text-decoration: none; color: #9fd8ff; font-weight: 800; }
+#moves p { margin: 4px 0 0; }
+body.arena.playing #moves { display: block; }
+body.arena.playing #moves.hide { display: none; }
+body.touch #moves { top: 90px; max-width: 300px; font-size: 10px; }
+#moves .touchOnly { display: none; }
+body.touch #moves .touchOnly { display: block; }

@@ -308,7 +308,7 @@
   // =========================================================================
   const Input = {
     keys: new Set(),
-    held: { attack: false, heavy: false, parry: false, dash: false, jump: false, pull: false, anjo: false, demonio: false, shoot: false, sp1: false, sp2: false, bomb: false, rage: false, heal: false },
+    held: { attack: false, heavy: false, parry: false, dash: false, jump: false, pull: false, anjo: false, demonio: false, shoot: false, gatilho: false, sp1: false, sp2: false, bomb: false, rage: false, heal: false },
     stick: { x: 0, y: 0, active: false, id: null, ox: 0, oy: 0 },
     mouse: { x: 0, y: 0, aim: false },
     buffer: { act: null, t: 0 },
@@ -323,7 +323,7 @@
   const KEYMAP = {
     KeyJ: 'attack', KeyZ: 'attack',
     KeyK: 'heavy', KeyX: 'shoot',
-    Space: 'jump', KeyI: 'jump', ShiftLeft: 'dash', ShiftRight: 'dash', KeyU: 'pull', KeyO: 'pull',
+    Space: 'jump', KeyI: 'jump', ShiftLeft: 'dash', ShiftRight: 'dash', KeyU: 'pull', KeyO: 'pull', KeyB: 'gatilho',
     KeyL: 'parry', KeyE: 'parry', KeyC: 'anjo',
     Tab: 'lock', KeyT: 'lock', KeyR: 'rage', KeyH: 'heal', KeyV: 'demonio', Digit3: 'heal',
     KeyQ: 'sp1', Digit1: 'sp1', KeyF: 'sp2', Digit2: 'sp2', KeyG: 'bomb', Digit4: 'bomb',
@@ -339,6 +339,7 @@
     }
     if (e.code === 'Escape' || e.code === 'KeyP') { togglePause(); return; }
     if (e.code === 'F3' || e.code === 'Backquote') { showFps = !showFps; e.preventDefault(); return; }
+    if (e.code === 'KeyM' && G.arena) { document.getElementById('moves').classList.toggle('hide'); return; }
     const act = KEYMAP[e.code];
     if (act) {
       e.preventDefault();
@@ -921,7 +922,7 @@
     combo: 0, comboT: 0,
     slowT: 0, slowScale: 1,
     trauma: 0, hurtFlash: 0,
-    enemies: [], projectiles: [], particles: [], texts: [], orbs: [], slashes: [], ghosts: [], chains: [], streaks: [], rings: [],
+    enemies: [], projectiles: [], particles: [], texts: [], orbs: [], slashes: [], ghosts: [], chains: [], streaks: [], discs: [], rings: [],
     lobs: [], fonts: [], embers: [], codexSeen: {},
     mode: 'campaign', // campaign | trial (Provação das Cinzas: ondas infinitas)
     spawnQueue: [], spawnT: 0, waveDelay: 0, maxAlive: 5, maxMelee: 2, maxRanged: 1, maxDrone: 2,
@@ -1192,7 +1193,7 @@
     relics: [], mods: null, flasks: 3, maxFlasks: 3, flaskFill: 0, bonusHp: 0, crownUsed: false, fontProg: 0, lavaT: 0,
     bombs: 2, riposteT: 0, riposteE: null, guardT: 0, spec: null, veilT: 0, furyT: 0, stanceT: 0, grabbed: null, heldBy: null,
     vz: 0, air: false, airJumps: 0, airDashes: 0, airBudget: 0, hangT: 0, followT: 0, followE: null, followNext: null, airIdx: -1, airWindow: 0, landT: 0, pullE: null, pullCd: 0, flip: 0, flipT: 0,
-    mode: null, modeIdx: -1, modeOf: null, shotT: 0, shotHand: 1, multiT: 0, quaked: false,
+    mode: null, modeIdx: -1, modeOf: null, shotT: 0, shotHand: 1, multiT: 0, quaked: false, gatT: 0, discCd: 0, gunCd: 0,
   };
   // relics/bonusHp vêm do início do capítulo (checkpoint); start = posição inicial do mapa
   function resetPlayer(relics, bonusHp, start) {
@@ -1216,7 +1217,7 @@
       hv: HEAVY, lock: null, rage: 0, sinceDash: 9, atkKind: 'combo', execTarget: null, execDone: false, pulse: 0,
       riposteT: 0, riposteE: null, guardT: 0, spec: null, veilT: 0, furyT: 0, stanceT: 0, grabbed: null, heldBy: null, blockHitT: 0,
       vz: 0, air: false, airJumps: 0, airDashes: 0, airBudget: 0, hangT: 0, followT: 0, followE: null, followNext: null, airIdx: -1, airWindow: 0, landT: 0, pullE: null, pullCd: 0, flip: 0, flipT: 0,
-      mode: null, modeIdx: -1, modeOf: null, shotT: 0, shotHand: 1, multiT: 0, quaked: false,
+      mode: null, modeIdx: -1, modeOf: null, shotT: 0, shotHand: 1, multiT: 0, quaked: false, gatT: 0, discCd: 0, gunCd: 0,
     });
     P.hitSet.clear();
     if (typeof onHeroChanged === 'function') onHeroChanged();
@@ -1404,6 +1405,7 @@
       return true;
     }
     if (act === 'anjo' || act === 'demonio') return true;
+    if (act === 'gatilho') { if (!startGatilho() && P.rage < GAT.cost) addText(P.x, P.y - 36, 'FÚRIA INSUFICIENTE (METADE)', '#9aa3b5', 12); return true; }
     if (act === 'shoot') { heroShot(); return true; }
     if (act === 'jump') return tryJump(mv);
     if (act === 'pull') return tryPull(mv);
@@ -1523,7 +1525,7 @@
     P.state = 'attack'; P.t = 0; P.atk = a; P.confirm = false; P.actionId++;
     P.atkKind = a === P.set.dash ? 'dash' : (a === P.set.l1 || a === P.set.l2 || a === P.set.l3 || a === P.set.l4 || a.modeOf) ? 'combo' : 'special';
     if (a.name) addText(P.x, P.y - 30, a.name, a.riposte ? '#ffe27a' : '#8fd3ff', 13);
-    P.lunged = false; P.hitSet.clear(); P.casted = false; P.multiT = 0; P.multiN = 0; P.quaked = false;
+    P.lunged = false; P.hitSet.clear(); P.casted = false; P.multiT = 0; P.multiN = 0; P.quaked = false; P.chargeHold = 0; P.atkMul = 1;
     P.swingSide = a.side || (P.comboIdx === 0 ? -1 : 1);
     P.face = aim.ang;
     P.atkTarget = aim.target;
@@ -1918,7 +1920,7 @@
       { id: 'dm2', clip: 'Great_B', wind: 0.18, active: 0.1, rec: 0.32, dmg: 22, range: 94, arc: 2.0, kb: 300, lunge: 280, poise: 70, stop: 0.1, demon: true, fire: 55, side: 1 },
       { id: 'dm3', name: 'TERREMOTO', clip: '2H_Melee_Attack_Chop', wind: 0.22, active: 0.12, rec: 0.4, dmg: 30, range: 112, arc: 1.6, kb: 640, lunge: 300, poise: 120, stop: 0.14, demon: true, fire: 60, quake: 140, knockdown: true, finisher: true },
     ],
-    heavy: { id: 'tremor', name: 'TREMOR', clip: '2H_Melee_Attack_Chop', wind: 0.3, active: 0.12, rec: 0.45, dmg: 34, range: 120, arc: 1.4, kb: 620, lunge: 200, poise: 150, stop: 0.15, demon: true, fire: 70, quake: 170, knockdown: true, finisher: true, guardBreak: true },
+    heavy: { chargeable: true, id: 'tremor', name: 'TREMOR', clip: '2H_Melee_Attack_Chop', wind: 0.3, active: 0.12, rec: 0.45, dmg: 34, range: 120, arc: 1.4, kb: 620, lunge: 200, poise: 150, stop: 0.15, demon: true, fire: 70, quake: 170, knockdown: true, finisher: true, guardBreak: true },
   };
   const SHOT = { every: 0.1, dmg: 2.6, range: 560 };
   function setMode(m) {
@@ -1953,7 +1955,8 @@
   }
   // último golpe do machado: racha o chão à frente com uma onda de fogo
   function quakeHit(a) {
-    const cx = P.x + Math.cos(P.face) * a.range * 0.6, cy = P.y + Math.sin(P.face) * a.range * 0.6, R = a.quake;
+    const M = P.atkMul || 1, cx = P.x + Math.cos(P.face) * a.range * 0.6, cy = P.y + Math.sin(P.face) * a.range * 0.6, R = a.quake * (0.8 + 0.2 * M);
+    if (M > 1.5) { addText(P.x, P.y - 44, 'TREMOR CARREGADO', '#ff7a3c', 15); G.whiteFlash = 0.15; }
     shake(0.5); vibrate(30); Sound.play('slam'); Sound.play('boom');
     G.rings.push({ x: cx, y: cy, r: 12, max: R + 20, t: 0, dur: 0.34, color: '255,120,40' });
     G.rings.push({ x: cx, y: cy, r: 6, max: R * 0.6, t: 0, dur: 0.24, color: '255,220,160' });
@@ -1964,7 +1967,7 @@
       const d = len(e.x - cx, e.y - cy);
       if (d > R + e.r) continue;
       P.hitSet.add(e);
-      damageEnemy(e, playerDmg(a.dmg * 0.6), Math.atan2(e.y - cy, e.x - cx), 460, a.poise * 0.7, { stop: 0.04, heavy: true, knockdown: true, move: a.id + '_chao', demon: true });
+      damageEnemy(e, playerDmg(a.dmg * 0.6 * M), Math.atan2(e.y - cy, e.x - cx), 460 * Math.min(1.5, M), a.poise * 0.7, { stop: 0.04, heavy: true, knockdown: true, move: a.id + '_chao', demon: true });
     }
     hitProps(cx, cy, 0, R, TAU, a.dmg, true, true);
     if (typeof physPush === 'function') physPush(cx, cy, R + 40, 4);
@@ -1988,7 +1991,10 @@
   }
   const canShootNow = () => P.state === 'idle' || P.state === 'jump' || P.state === 'guard' || (P.state === 'attack' && afterStrike(P.atk, WHIFF_LOCK)) || (P.state === 'dash' && P.t >= dashT() * 0.5) || P.state === 'airdash';
   function heroShot() {
-    if ((P.shotT || 0) > 0 || !canShootNow()) return false;
+    if (!canShootNow()) return false;
+    if (P.mode === 'anjo') return throwDisc();
+    if (P.mode === 'demonio') return shotgun();
+    if ((P.shotT || 0) > 0) return false;
     P.shotT = SHOT.every; P.shotHand = -(P.shotHand || 1);
     const e = shootTarget();
     if (e) P.face = Math.atan2(e.y - P.y, e.x - P.x);
@@ -2012,7 +2018,7 @@
   // ---------- Rastros de luz (tiros, estrelas de impacto, pilares do lançador) ----------
   // x, y (plano), h (altura, px), ang (direção no plano), pitch, len e w (px), color 'r,g,b', dur (s)
   function streak(x, y, h, ang, pitch, len_, w, color, dur) {
-    if (G.streaks.length > 110) G.streaks.shift();
+    if (G.streaks.length > (PERF.tier <= 1 ? 50 : 110)) G.streaks.shift(); // celular fraco: menos rastros
     G.streaks.push({ x, y, h, ang, pitch, len: len_, w, color, t: 0, dur });
   }
   function starBurst(x, y, h, color, n, size, dur) {
@@ -2021,6 +2027,97 @@
       const pa = a0 + k / n * TAU + rand(-0.2, 0.2), L = size * rand(0.6, 1.2), c = Math.cos(pa), sn = Math.sin(pa);
       streak(x + Math.cos(ry) * c * L * 0.5, y + Math.sin(ry) * c * L * 0.5, h + sn * L * 0.5, ry + (c < 0 ? Math.PI : 0), Math.asin(clamp(sn, -1, 1)), L, Math.max(4, size * 0.16), color, dur || 0.12);
     }
+  }
+  // =========================================================================
+  // O resto do vídeo de referência:
+  //   GATILHO — o herói se transforma: os inimigos em volta flutuam, dano e velocidade sobem, a vida volta
+  //   DISCO (Anjo + tiro) — lâmina que vai, gira no lugar puxando e cortando, e volta
+  //   ESCOPETA (Demônio + tiro) — rajada de fogo curta em leque que empurra
+  // =========================================================================
+  const GAT = { cost: 50, dur: 10, drain: 5 };
+  function startGatilho() {
+    if (P.gatT > 0 || P.rage < GAT.cost || P.state === 'dead') return false;
+    P.gatT = GAT.dur;
+    G.whiteFlash = 0.5; slowmo(0.7, 0.35); shake(0.7); vibrate(60);
+    Sound.play('supreme'); Sound.play('boom');
+    heroVoice('big', { prio: 2 });
+    G.rings.push({ x: P.x, y: P.y, r: 20, max: 460, t: 0, dur: 0.5, color: '255,90,70' }, { x: P.x, y: P.y, r: 10, max: 300, t: 0, dur: 0.35, color: '255,240,230', h: 40 });
+    starBurst(P.x, P.y, P.z + 50, '255,120,90', 10, 120, 0.3);
+    addText(P.x, P.y - 50, 'GATILHO!', '#ff5a4a', 24);
+    for (const e of G.enemies) { // todos em volta sobem e ficam flutuando
+      if (!targetable(e) || !canLaunch(e) || e.state === 'lurk' || len(e.x - P.x, e.y - P.y) > 460) continue;
+      if (e.state !== 'air') { setState(e, 'air', 9); e.z = Math.max(e.z || 0, 4); e.token = false; e.slammed = false; }
+      e.vz = 480; e.floatT = 3.2; e.hangT = 0;
+    }
+    styleAdd(40, 'gatilho');
+    return true;
+  }
+  function gatilhoTick(dt) {
+    if (!(P.gatT > 0)) return;
+    P.gatT -= dt; P.rage = Math.max(0, P.rage - GAT.drain * dt);
+    if (P.state !== 'dead') P.hp = Math.min(P.maxHp, P.hp + 4 * dt);
+    if (P.rage <= 0) P.gatT = 0;
+    P.gatFx = (P.gatFx || 0) - dt;
+    if (P.gatFx <= 0) { P.gatFx = 0.07; const a = rand(0, TAU); streak(P.x + Math.cos(a) * 14, P.y + Math.sin(a) * 14, P.z + rand(10, 70), a, rand(0.6, 1.4), 40, 5, '255,80,60', 0.2); }
+    if (P.gatT <= 0) { addText(P.x, P.y - 40, 'FIM DO GATILHO', '#ffb0a0', 13); Sound.play('uiok'); }
+  }
+  // disco da foice
+  function throwDisc() {
+    if ((P.discCd || 0) > 0) return false;
+    const e = shootTarget();
+    const a = e ? Math.atan2(e.y - P.y, e.x - P.x) : P.face;
+    const d = e ? Math.min(360, len(e.x - P.x, e.y - P.y)) : 260;
+    P.face = a; P.discCd = 1.1;
+    G.discs.push({ sx: P.x, sy: P.y, tx: P.x + Math.cos(a) * d, ty: P.y + Math.sin(a) * d, x: P.x, y: P.y, h: P.z + 44, th: e ? (e.z || 0) + 40 : P.z + 44, t: 0, tick: 0, fx: 0 });
+    Sound.play('throw'); Sound.play('swing');
+    addText(P.x, P.y - 34, 'DISCO', '#9fd8ff', 13);
+    return true;
+  }
+  function updateDiscs(dt) {
+    for (const D of G.discs) {
+      D.t += dt;
+      const OUT = 0.3, HOLD = 0.9, BACK = 0.3;
+      if (D.t < OUT) { const f = easeOut(D.t / OUT); D.x = lerp(D.sx, D.tx, f); D.y = lerp(D.sy, D.ty, f); D.h = lerp(D.h, D.th, 0.2); }
+      else if (D.t < OUT + HOLD) { D.x = D.tx; D.y = D.ty; }
+      else { const f = clamp((D.t - OUT - HOLD) / BACK, 0, 1); D.x = lerp(D.tx, P.x, f * f); D.y = lerp(D.ty, P.y, f * f); D.h = lerp(D.th, P.z + 44, f); }
+      D.fx -= dt;
+      if (D.fx <= 0) { D.fx = 0.045; G.rings.push({ x: D.x, y: D.y, r: 14, max: 42, t: 0, dur: 0.12, color: '160,210,255', h: D.h, tilt: Math.sin(D.t * 9) * 0.3 }); }
+      D.tick -= dt;
+      if (D.tick <= 0) { // corta e puxa quem estiver perto
+        D.tick = 0.11;
+        for (const e of G.enemies) {
+          if (!targetable(e) || e.state === 'lurk') continue;
+          const dd = len(e.x - D.x, e.y - D.y);
+          if (dd > 70 + e.r || Math.abs((e.z || 0) + 40 - D.h) > 90) continue;
+          const pull = Math.atan2(D.y - e.y, D.x - e.x);
+          damageEnemy(e, playerDmg(3), pull, dd > 20 ? 90 : 0, 6, { stop: 0.004, move: 'disco', angel: true, quiet: true, shot: true });
+        }
+        Sound.play('swing');
+      }
+    }
+    G.discs = G.discs.filter((D) => D.t < 1.5);
+  }
+  // escopeta de fogo
+  function shotgun() {
+    if ((P.gunCd || 0) > 0) return false;
+    P.gunCd = 0.55;
+    const e = shootTarget();
+    const a = e ? Math.atan2(e.y - P.y, e.x - P.x) : P.face;
+    P.face = a;
+    const R = 170, arc = 0.9;
+    for (let k = -3; k <= 3; k++) streak(P.x + Math.cos(a + k * 0.12) * R * 0.5, P.y + Math.sin(a + k * 0.12) * R * 0.5, P.z + 46, a + k * 0.12, rand(-0.08, 0.08), R, 9, '255,140,50', 0.14);
+    starBurst(P.x + Math.cos(a) * 20, P.y + Math.sin(a) * 20, P.z + 46, '255,200,120', 6, 40, 0.1);
+    Sound.play('gun'); shake(0.25); vibrate(18);
+    P.vx -= Math.cos(a) * 160; P.vy -= Math.sin(a) * 160; // coice
+    for (const q of G.enemies) {
+      if (!targetable(q) || q.state === 'lurk') continue;
+      const dx = q.x - P.x, dy = q.y - P.y, d = len(dx, dy);
+      if (d > R + q.r || Math.abs(angDiff(a, Math.atan2(dy, dx))) > arc / 2 + 0.1) continue;
+      if (Math.abs((q.z || 0) - P.z) > 110) continue;
+      const k = 1.3 - d / R * 0.6;
+      damageEnemy(q, playerDmg(9 * k), Math.atan2(dy, dx), 560 * k, 50, { stop: 0.05, heavy: true, move: 'escopeta', demon: true });
+    }
+    return true;
   }
   function startParry(mv) {
     let best = null, bd = 260;
@@ -2261,7 +2358,10 @@
     P.followT -= dt; P.airWindow -= dt; P.landT -= dt; P.pullCd -= dt; P.flipT += dt;
     if (P.followT <= 0) P.followE = null;
     if (P.state !== 'dead') setMode(Input.held.anjo ? 'anjo' : Input.held.demonio ? 'demonio' : null);
-    P.shotT -= dt;
+    P.shotT -= dt; P.discCd -= dt; P.gunCd -= dt;
+    if (Input.held.anjo && Input.held.demonio && !(P.gatT > 0) && P.rage >= GAT.cost && P.state !== 'dead') startGatilho(); // Anjo + Demônio juntos
+    gatilhoTick(dt); updateDiscs(dt);
+    if (G.arena && P.state !== 'dead') { P.hp = Math.min(P.maxHp, P.hp + 6 * dt); P.rage = Math.min(100, P.rage + 3 * dt); P.bombs = Math.max(P.bombs, 1); }
     if (Input.held.shoot && P.state !== 'dead') heroShot();
     if (P.state === 'idle' && P.comboWindow > 0) P.comboPause += dt; else if (P.state !== 'idle') P.comboPause = 0;
     if (P.stDelay <= 0) P.st = Math.min(P.maxSt, P.st + (P.state === 'guard' ? 14 : 40) * dt);
@@ -2284,7 +2384,7 @@
     else if (!buf.act && Input.held.attack && canAttackNow() && P.state !== 'guard' && P.state !== 'stance') tryAction('attack', mv);
 
     const moveK = expK(PL.accel, dt);
-    const spd = P.mods.speed * (P.furyT > 0 ? 1.08 : 1);
+    const spd = P.mods.speed * (P.furyT > 0 ? 1.08 : 1) * (P.gatT > 0 ? 1.2 : 1);
     switch (P.state) {
       case 'idle': {
         P.vx += (mv.x * spd - P.vx) * moveK;
@@ -2369,6 +2469,10 @@
             }
           }
           if (a.remote && P.atkTarget) remoteStrike(a, P.atkTarget);
+        }
+        if (a.chargeable && Input.held.heavy && P.t >= a.wind * 0.85 && P.chargeHold < 0.9) { // segurar carrega o soco de fogo
+          P.t -= dt; const was = P.chargeHold; P.chargeHold += dt; P.atkMul = 1 + P.chargeHold * 1.4;
+          if (Math.floor(P.chargeHold / 0.3) !== Math.floor(was / 0.3)) { Sound.play('pickup'); G.rings.push({ x: P.x, y: P.y, r: 10, max: 60 + P.chargeHold * 60, t: 0, dur: 0.25, color: '255,120,60' }); starBurst(P.x, P.y, P.z + 50, '255,120,50', 4, 30 + P.chargeHold * 30, 0.12); }
         }
         if (a.multi && P.t >= a.wind && P.t < aEnd) { // giro de vários acertos
           P.multiT -= dt;
@@ -2626,7 +2730,7 @@
 
   // Dano do golpe no jogador → inimigos (com bônus de alvo marcado, véu e fúria)
   function playerDmg(base) {
-    let d = base * P.mods.dmg * (P.furyT > 0 ? 1.25 : 1);
+    let d = base * P.mods.dmg * (P.furyT > 0 ? 1.25 : 1) * (P.gatT > 0 ? 1.5 : 1);
     if (P.veilT > 0) { d *= 2.2; P.veilT = 0; addText(P.x, P.y - 36, 'DO VÉU!', '#e04fae', 15); }
     return d;
   }
@@ -2643,7 +2747,7 @@
       if (a.aerial && Math.abs((e.z || 0) - P.z) > (e.state === 'air' || e.fly ? 85 : 64 + (e.boss ? 40 : 0))) continue;
       P.hitSet.add(e);
       const lau = a.aerial ? (!a.airFinish && e.state !== 'air' ? 380 : 0) : a.launch;
-      if (damageEnemy(e, playerDmg(a.dmg), ang, a.kb, a.poise * P.mods.poise, { stop: a.stop, finisher: a.finisher, launch: lau, slam: a.slam, knockdown: a.knockdown || (a.airFinish && e.state !== 'air'), guardBreak: a.guardBreak, move: a.id, riposte: a.riposte, juggle: !!a.aerial, airFinish: !!a.airFinish, angel: a.angel, demon: a.demon, quiet: a.multi && P.multiN > 1 })) {
+      if (damageEnemy(e, playerDmg(a.dmg * (P.atkMul || 1)), ang, a.kb, a.poise * P.mods.poise, { stop: a.stop, finisher: a.finisher, launch: lau, slam: a.slam, knockdown: a.knockdown || (a.airFinish && e.state !== 'air'), guardBreak: a.guardBreak, move: a.id, riposte: a.riposte, juggle: !!a.aerial, airFinish: !!a.airFinish, angel: a.angel, demon: a.demon, quiet: a.multi && P.multiN > 1 })) {
         P.confirm = true;
         if (a.fire) fireHit(e, a);
         if (lau && e.state === 'air') streak(e.x, e.y, (e.z || 0) + 70, P.face, Math.PI / 2, 190, 18, '255,150,60', 0.24); // pilar do lançador
@@ -2721,6 +2825,7 @@
     const armored = (H_().armor && (P.state === 'charge' || P.state === 'heavy' || (P.state === 'attack' && P.atk && (P.atk.finisher || P.atk.arc >= TAU)))) || (P.furyT > 0 && P.hero === 'orsa' && P.state !== 'idle');
     dmg *= P.mods.dmgTaken * (armored ? 0.65 : 1);
     P.hp -= dmg; G.dmgTaken += dmg;
+    if (G.arena && P.hp < 1) P.hp = 1; // arena de teste: não morre
     G.noHit = false;
     STYLE.pts *= 0.45; // apanhar derruba o estilo
     P.flinchT = FLINCH_TIME; P.flinchA = ang; P.flinchK = 1.3; P.hitSeq = (P.hitSeq || 0) + 1; P.hitPow = kb;
@@ -3809,6 +3914,7 @@
   function passiveStep(e, dt) {
     switch (e.state) {
       case 'air': {
+        if (e.floatT > 0) { e.floatT -= dt; if (e.vz < 120) { e.vz += ((95 - e.z) * 3 - e.vz) * Math.min(1, dt * 4); e.z += e.vz * dt; return; } }
         if (e.pulledT > 0) { e.pulledT -= dt; if (e.pulledT <= 0) { e.vx *= 0.1; e.vy *= 0.1; e.vz = 60; e.hangT = 0.6; } }
         if (e.hangT > 0) e.hangT -= dt;
         if (e.hangT > 0 && e.vz < 80) { e.vz -= GRAV * 0.12 * dt; if (e.vz < -70) e.vz = -70; } // suspenso pelos golpes (só depois de parar de subir)
@@ -4953,12 +5059,20 @@
       if (changed) { worldChanged(); collideWorld(P); }
     }
     G.spawnQueue = buildWave(n);
-    G.maxAlive = Math.min(3 + Math.ceil(n * 0.5), 7);
-    G.maxMelee = Math.min(1 + Math.floor(n / 3), 2);
+    if (G.arena) { // horda grande e leve, como no vídeo
+      const q = ['grunt', 'grunt', 'grunt', 'grunt', 'rogue', 'rogue', 'archer', 'shield'];
+      if (n % 2 === 0) q.push('drone', 'drone');
+      if (n % 3 === 0) q.push('brute');
+      for (let i = q.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = q[i]; q[i] = q[j]; q[j] = t; }
+      G.spawnQueue = q;
+    }
+    G.maxAlive = G.arena ? 9 : Math.min(3 + Math.ceil(n * 0.5), 7);
+    G.maxMelee = G.arena ? 3 : Math.min(1 + Math.floor(n / 3), 2);
     G.maxRanged = Math.min(1 + Math.floor(n / 6), 2);
     G.maxDrone = Math.min(1 + Math.floor(n / 5), 2);
     G.spawnT = 0.6;
-    G.banner = { text: 'ONDA ' + n, sub: n % 5 === 0 ? 'Um campeão se aproxima…' : G.spawnQueue.length + ' inimigos', t: 2.4 };
+    if (G.arena) G.banner = { text: 'HORDA ' + n, sub: G.spawnQueue.length + ' inimigos', t: 1.6 };
+    else G.banner = { text: 'ONDA ' + n, sub: n % 5 === 0 ? 'Um campeão se aproxima…' : G.spawnQueue.length + ' inimigos', t: 2.4 };
     Sound.play('wave');
   }
   function spawnEnemy(kind) {
@@ -4987,7 +5101,7 @@
       }
     } else if (alive === 0) {
       if (G.waveDelay <= 0) {
-        G.waveDelay = 2.6;
+        G.waveDelay = G.arena ? 1.2 : 2.6;
         const heal = Math.min(20, P.maxHp - P.hp);
         if (heal > 0) { P.hp += heal; addText(P.x, P.y - 30, '+' + Math.round(heal) + ' HP', '#6ef08a', 15); }
         for (const f of G.fonts) f.ready = true;
@@ -5052,6 +5166,7 @@
     savePrev();
     G.trauma = Math.max(0, G.trauma - 1.8 * dt);
     G.hurtFlash = Math.max(0, G.hurtFlash - dt);
+    G.whiteFlash = Math.max(0, (G.whiteFlash || 0) - dt);
     if (G.banner.t > 0) G.banner.t -= dt;
 
     let scale = 1;
@@ -5826,7 +5941,7 @@
   const ASSET_BASE = 'assets/';
   // Página autocontida: modelos (JSON) e texturas (data URI) podem vir embutidos em window.__ASSETS
   const EMBED = window.__ASSETS || null;
-  const BUILD = 'build 15 · anjo e demônio, tiros e estilo SSS';
+  const BUILD = 'build 16 · arena do vídeo, gatilho, disco e escopeta';
   const ANIM_FILE = 'h/anims_h.glb';
   // texturas fotográficas do cenário (m = metros cobertos por uma repetição) e rochas escaneadas
   const ENV_TEX = {
@@ -6490,6 +6605,19 @@
   // o corpo inclina ao arrancar, frear e fazer curva.
   const _lq = new THREE.Quaternion(), _lq2 = new THREE.Quaternion(), _lax = new THREE.Vector3();
   const LOOK_CHAIN = [['spine_02', 0.16], ['spine_03', 0.24], ['neck_01', 0.26], ['Head', 0.34]];
+  // As camadas por código (olhar, corte, reação, pernas no ar) mexem nos ossos depois do clipe.
+  // O mixer só reescreve um osso quando o valor do clipe muda; com a pose parada (hit-stop, pausa)
+  // a camada se acumularia quadro a quadro. Guardamos a pose limpa e devolvemos antes do próximo quadro.
+  function keepBone(v, b) {
+    if (b.userData.kf === v.kfid && b.userData.kv === v) return;
+    b.userData.kf = v.kfid; b.userData.kv = v;
+    (b.userData.kq || (b.userData.kq = new THREE.Quaternion())).copy(b.quaternion);
+    (v.kept || (v.kept = [])).push(b);
+  }
+  function restoreBones(v) {
+    if (v.kept) { for (const b of v.kept) b.quaternion.copy(b.userData.kq); v.kept.length = 0; }
+    v.kfid = (v.kfid || 0) + 1;
+  }
   function modelQuat(b, model, out) {
     out.identity();
     for (let o = b; o && o !== model; o = o.parent) out.premultiply(o.quaternion);
@@ -6505,7 +6633,7 @@
       if (!b || !b.parent) continue;
       modelQuat(b.parent, v.model, _lq).invert();
       _lax.set(0, 1, 0).applyQuaternion(_lq);
-      b.quaternion.premultiply(_lq2.setFromAxisAngle(_lax, v.look * w));
+      keepBone(v, b); b.quaternion.premultiply(_lq2.setFromAxisAngle(_lax, v.look * w));
     }
   }
   // plano do corte: rola e arqueia coluna e ombro do braço da arma
@@ -6522,9 +6650,22 @@
       if (!b || !b.parent) continue;
       modelQuat(b.parent, v.model, _lq).invert();
       _lax.set(0, 0, 1).applyQuaternion(_lq);
-      b.quaternion.premultiply(_lq2.setFromAxisAngle(_lax, v.swR * w * 2));
+      keepBone(v, b); b.quaternion.premultiply(_lq2.setFromAxisAngle(_lax, v.swR * w * 2));
       _lax.set(1, 0, 0).applyQuaternion(_lq);
       b.quaternion.premultiply(_lq2.setFromAxisAngle(_lax, v.swP * w * 2));
+    }
+  }
+  // pernas no ar: joelhos dobrados por cima do clipe (os golpes de chão viram golpes aéreos)
+  const TUCK = [['thigh_l', -1.05], ['thigh_r', -0.75], ['calf_l', 1.55], ['calf_r', 1.25]];
+  function airTuck(v, amt, dt) {
+    v.tuck = (v.tuck || 0) + (amt - (v.tuck || 0)) * Math.min(1, dt * 12);
+    if (!v.bones || v.tuck < 0.01) return;
+    for (const [name, ang] of TUCK) {
+      const b = v.bones[name];
+      if (!b || !b.parent) continue;
+      modelQuat(b.parent, v.model, _lq).invert();
+      _lax.set(1, 0, 0).applyQuaternion(_lq);
+      keepBone(v, b); b.quaternion.premultiply(_lq2.setFromAxisAngle(_lax, ang * v.tuck));
     }
   }
   function leanLayer(v, vx, vy, face, dt) {
@@ -6657,7 +6798,7 @@
       if (!v.ragdoll.freed) { physApplyRagdoll(v); if (P.deadT === undefined) P.deadT = 0; }
       return;
     }
-    v.mixer.update(dt);
+    restoreBones(v); v.mixer.update(dt);
     const bodyR = bodyYaw(v, dt);
     v.root.rotation.y = Math.PI / 2 - faceOf(P) - bodyR;
     v.root.position.y = P.z * U;
@@ -6669,6 +6810,7 @@
       lookLayer(v, yaw, busy ? 0 : P.state === 'attack' ? 0.35 : 1, dt);
       hitReact(v, P, faceOf(P) + bodyR, dt);
       swingLayer(v, dt);
+      airTuck(v, !P.air ? 0 : P.state === 'attack' ? 0.85 : P.state === 'jump' ? (P.flip && P.flipT < 0.45 ? 1 : 0.4) : P.state === 'airdash' ? 0.65 : P.state === 'dive' ? (P.diveGo ? 0.15 : 0.7) : P.state === 'pull' ? 0.5 : 0.4, dt);
     }
     applyFlinch(v, P, P.face);
     if (P.state !== 'dash') leanLayer(v, P.vx, P.vy, P.face, dt);
@@ -6677,7 +6819,7 @@
       if (a < TAU - 0.01) { v.tilt.rotation.x += a; v.tilt.position.y += hc * (1 - Math.cos(a)); v.tilt.position.z -= hc * Math.sin(a); }
     }
     tint(v, P.state === 'stance' ? 'parry' : P.parryT > 0 ? 'parry' : P.state === 'charge' && P.chargeLv > 1 ? 'charge' + P.chargeLv
-      : P.state === 'special' && P.spec && P.spec.def.supreme ? 'supreme' : P.furyT > 0 ? 'fury' : P.mode === 'anjo' ? 'angel' : P.mode === 'demonio' ? 'demon'
+      : P.state === 'special' && P.spec && P.spec.def.supreme ? 'supreme' : P.furyT > 0 ? 'fury' : P.gatT > 0 ? 'rage' : P.mode === 'anjo' ? 'angel' : P.mode === 'demonio' ? 'demon'
       : (P.iframe > 0 && P.state === 'hurt' && Math.floor(G.time * 20) % 2 === 0 ? 'flash' : 'none'));
   }
   function specialAnim(v) {
@@ -6849,7 +6991,7 @@
         default: (MODEL_ANIM[e.type] || MODEL_ANIM.grunt)(v, e, p);
       }
     }
-    v.mixer.update(e.frozenT > 0 ? 0 : dt);
+    restoreBones(v); v.mixer.update(e.frozenT > 0 ? 0 : dt);
     const bodyR = bodyYaw(v, e.frozenT > 0 ? 0 : dt);
     v.root.rotation.y = Math.PI / 2 - faceOf(e) - bodyR;
     if (!PASSIVE.has(e.state) && e.state !== 'spawn' && e.state !== 'dodge' && e.frozenT <= 0) {
@@ -7190,7 +7332,7 @@
       if (!b || !b.parent) continue;
       modelQuat(b.parent, v.model, _lq).invert();
       _rax.set(hr.ax / mag, 0, hr.az / mag).applyQuaternion(_lq);
-      b.quaternion.premultiply(_lq2.setFromAxisAngle(_rax, Math.min(0.9, mag) * w * 2.2));
+      keepBone(v, b); b.quaternion.premultiply(_lq2.setFromAxisAngle(_rax, Math.min(0.9, mag) * w * 2.2));
     }
   }
   function animateCorpse(v, dt) {
@@ -7205,14 +7347,14 @@
         physApplyRagdoll(v);
         if (v.deadT > 6) physFreeRagdoll(v); // assentou: o corpo congela na pose em que caiu
       }
-      if (!v.ragdoll) v.mixer.update(dt);
+      if (!v.ragdoll) { restoreBones(v); v.mixer.update(dt); }
       v.root.position.y = -Math.max(0, v.deadT - 7) * 0.5;
       tint(v, 'none');
       return v.deadT > 9;
     }
     if (v.isModel) {
       if (!v.died) { v.died = true; onceAnim(v, v.def.undead ? 'Death_C_Skeletons' : 'Death_A', 1, 0.08); }
-      v.mixer.update(dt);
+      restoreBones(v); v.mixer.update(dt);
       v.tilt.rotation.set(0, 0, 0); v.tilt.position.set(0, 0, 0);
       v.root.position.y = -Math.max(0, v.deadT - 1.6) * 0.8;
       tint(v, 'none');
@@ -8879,7 +9021,7 @@
     if (text !== lastCap) { lastCap = text; capEl.textContent = text; capEl.classList.toggle('on', !!text); capEl.classList.remove('fade'); void capEl.offsetWidth; capEl.classList.add('fade'); }
     let obj = '';
     if (G.state === 'play' || G.state === 'cine') {
-      if (G.mode === 'trial') obj = 'Provação · onda ' + G.wave;
+      if (G.mode === 'trial') obj = (G.arena ? 'Arena do vídeo · horda ' : 'Provação · onda ') + G.wave;
       else if (CAMPAIGN.exit && CAMPAIGN.exit.open) obj = 'Siga para a saída';
       else if (CAMPAIGN.altar && !CAMPAIGN.altar.taken) obj = 'Vá até o altar';
       else if (curGoal()) obj = goalText();
@@ -9321,7 +9463,9 @@
   }
   function drawHUD() {
     const low = P.hp / P.maxHp < 0.3 && P.state !== 'dead';
-    const vig = Math.max(G.hurtFlash * 1.6, low ? 0.25 + 0.15 * Math.sin(G.time * 5) : 0);
+    if (G.whiteFlash > 0) { ctx.fillStyle = `rgba(255,244,236,${Math.min(0.85, G.whiteFlash * 1.8)})`; ctx.fillRect(0, 0, W, H); }
+    if (P.gatT > 0) { ctx.textAlign = 'center'; ctx.font = 'italic 900 15px system-ui, sans-serif'; ctx.fillStyle = '#ff6a5a'; ctx.fillText('GATILHO  ' + Math.ceil(P.gatT) + 's', W / 2, H * 0.17); }
+    const vig = Math.max(G.hurtFlash * 1.6, low ? 0.25 + 0.15 * Math.sin(G.time * 5) : 0, P.gatT > 0 ? 0.2 + 0.05 * Math.sin(G.time * 8) : 0);
     if (vig > 0) {
       const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
       g.addColorStop(0, 'rgba(255,40,60,0)');
@@ -9545,7 +9689,7 @@
     Object.assign(G, {
       state: 'play', mode, time: 0, wave: 0, score: 0, kills: 0, parries: 0, bestCombo: 0, execs: 0, dmgTaken: 0,
       combo: 0, comboT: 0, slowT: 0, slowScale: 1, trauma: 0, hurtFlash: 0, noHit: true, bossDeadT: 0,
-      enemies: [], projectiles: [], particles: [], texts: [], orbs: [], slashes: [], ghosts: [], chains: [], streaks: [], rings: [], lobs: [],
+      enemies: [], projectiles: [], particles: [], texts: [], orbs: [], slashes: [], ghosts: [], chains: [], streaks: [], discs: [], rings: [], lobs: [],
       spawnQueue: [], spawnT: 0, waveDelay: 0, dirT: 0, overT: -1, run: { embers: [] }, codexSeen: G.codexSeen || {},
       banner: { text: '', sub: '', t: 0 },
       corpses: [], blades: [], cinzas: 0, brechaT: 0, worldRev: 0, fxq: [],
@@ -9567,6 +9711,7 @@
     cam.x = cam.px = P.x; cam.y = cam.py = P.y;
   }
   function startChapter(i, withPrologue, quick) {
+    document.body.classList.remove('arena'); G.arena = false;
     if (!MODELS.settled) return;
     Sound.init(); Sound.resume();
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
@@ -9589,8 +9734,10 @@
   }
   function startTrial() {
     if (!MODELS.settled) return;
+    document.body.classList.remove('arena');
     Sound.init(); Sound.resume();
     resetBattle('trial');
+    G.arena = false;
     CAMPAIGN.idx = -1;
     OBJ.list = []; OBJ.i = -1;
     resetPlayer([], 0, TRIAL_MAP.start);
@@ -9599,6 +9746,16 @@
     show(null);
     document.body.classList.add('playing');
     lockPointer();
+    startWave(1);
+  }
+  // Arena do vídeo: hordas de inimigos leves sem parar, tudo liberado, vida e fúria voltando
+  function startArena() {
+    if (!MODELS.settled) return;
+    startTrial();
+    G.arena = true; P.rage = 100;
+    document.body.classList.add('arena');
+    $('moves').classList.remove('hide');
+    G.banner = { text: 'ARENA DO VÍDEO', sub: 'Tudo liberado · M mostra/esconde os golpes', t: 3.5 };
     startWave(1);
   }
   function showChapterCard(ch) {
@@ -9720,7 +9877,7 @@
     }
     show('over');
   }
-  function retry() { if (G.mode === 'trial') startTrial(); else startChapter(CAMPAIGN.idx, false, true); }
+  function retry() { if (G.arena) startArena(); else if (G.mode === 'trial') startTrial(); else startChapter(CAMPAIGN.idx, false, true); }
 
   // ---------- Pausa ----------
   function setPaused(p) {
@@ -9888,6 +10045,7 @@
     else if (go === 'chapters') openChapters();
     else if (go === 'figueira') openFigueira(G.state === 'result' ? 'result' : 'menu');
     else if (go === 'trial') startTrial();
+    else if (go === 'arena') startArena();
     else if (go === 'codex') openCodex(b.dataset.tab);
     else if (go === 'options') { optionsFrom = G.state === 'paused' ? 'pause' : 'menu'; openOptions(); }
     else if (go === 'controls') show('controls');
@@ -9963,7 +10121,7 @@
     PHYS, physRagdoll, physStep,
     physInfo: () => ({ ready: PHYS.ready, bodies: PHYS.bodies.length, kinds: PHYS.bodies.map((r) => r.kind).join(','), ragdolls: PHYS.ragdolls.map((rd) => rd.parts.map((p) => { const t = p.b.translation(); return p.name + ':' + t.x.toFixed(2) + ',' + t.y.toFixed(2) + ',' + t.z.toFixed(2); }).filter((_, i) => [0, 2, 8].includes(i)).join(' ')), statics: PHYS.statics.length, chars: PHYS.chars.size }), startChapter, startTrial, makeEnemy, step, STEP, cineAdvance, triggerEncounter, chooseRelic, openRelicChoice,
     zoom: (d) => { CAMERA.dist = d; }, CAMERA, PERF: () => PERF, toggleLock, OBST: () => OBST, HAZ: () => HAZ, COVER: () => COVER, freeSpot, hasLOS, findPath, inObstacle, inLava, TYPES,
-    HEROES, WEAPONS, SPECIALS, READ, STYLE, STYLE_R: () => STYLE_RANKS[STYLE.rank].name + ":" + Math.round(STYLE.pts), Input, JUMP, CAMFX, resetPlayer, tryAction, startSpecial, damageEnemy, openFigueira, heroOpen, views: () => views, playerView: () => playerView,
+    HEROES, WEAPONS, SPECIALS, READ, STYLE, STYLE_R: () => STYLE_RANKS[STYLE.rank].name + ":" + Math.round(STYLE.pts), Input, JUMP, startGatilho, TUCK, CAMFX, resetPlayer, tryAction, startSpecial, damageEnemy, openFigueira, heroOpen, views: () => views, playerView: () => playerView,
     setHero: (h, w) => { SAVE.hero = h; if (w) SAVE.weaponOf[h] = w; },
     hold: (on) => { DEBUG_HOLD.on = on; }, audio: () => ({ sfx: Sound.stats(), music: Music.current, m: Music.stats() }), env: () => ({ hdr: scene.environment !== BASE_ENV, keys: Object.keys(envCache).map((k) => k + ':' + (envCache[k] === 'loading' ? 'loading' : envCache[k] ? 'ok' : 'fail')), fx: Object.keys(FXS).map((k) => k + ':' + FXS[k].list.length + (FXS[k].tex.ok ? '' : '!')).join(' ') }), renderNow: (dt) => render(1, dt || 1 / 60), CAMFX,
     info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, progs: renderer.info.programs.length }),
